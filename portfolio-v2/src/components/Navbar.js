@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import ThemeToggle from './ThemeToggle';
 import LanguageToggle from './LanguageToggle';
@@ -9,17 +10,28 @@ import { stringsFor } from '@/lib/i18n';
 import styles from './Navbar.module.css';
 
 const SECTIONS = [
-  { href: '#about', key: 'about' },
-  { href: '#news', key: 'news' },
-  { href: '#education', key: 'education' },
-  { href: '#publications', key: 'publications' },
-  { href: '#experience', key: 'experience' },
-  { href: '#contact', key: 'contact' },
+  { hash: '#about', key: 'about' },
+  { hash: '#news', key: 'news' },
+  { hash: '#education', key: 'education' },
+  { hash: '#publications', key: 'publications' },
+  { hash: '#experience', key: 'experience' },
+  { hash: '#contact', key: 'contact' },
 ];
+
+const HOME = '/';
 
 export default function Navbar({ active = null, transparent = false }) {
   const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
   const t = stringsFor(useLang()).nav;
+
+  /*
+   * The sections only exist on the home page, so anywhere else these links have
+   * to point back at it. A bare "#about" on /out-of-work matched nothing and
+   * silently did nothing when clicked.
+   */
+  const onHome = (pathname || HOME).replace(/\/$/, '') === '';
+  const sectionHref = (hash) => (onHome ? hash : `${HOME}${hash}`);
 
   // Highlight the section currently in view, and (on the home page) turn the
   // transparent overlay bar into a solid bar once past the hero.
@@ -56,10 +68,10 @@ export default function Navbar({ active = null, transparent = false }) {
         <div className={styles.navLinks}>
           {SECTIONS.map((section) => (
             <Link
-              key={section.href}
-              href={section.href}
-              data-section="true"
-              className={`${styles.navLink} ${active === section.href.slice(1) ? styles.active : ''}`}
+              key={section.hash}
+              href={sectionHref(section.hash)}
+              data-section={onHome ? 'true' : undefined}
+              className={`${styles.navLink} ${active === section.hash.slice(1) ? styles.active : ''}`}
             >
               {t[section.key]}
             </Link>

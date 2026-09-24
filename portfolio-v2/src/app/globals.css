@@ -89,6 +89,9 @@ a:hover {
 
 main section {
   padding: 64px 0;
+  /* Anchor targets must clear the fixed navbar, which wraps to two rows on a
+     phone and so is taller than the 72px scroll padding alone. */
+  scroll-margin-top: 96px;
 }
 
 .section-title {
