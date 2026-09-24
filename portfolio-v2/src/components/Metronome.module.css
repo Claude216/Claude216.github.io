@@ -125,7 +125,10 @@
     align-items: center;
     gap: 14px;
     min-height: 48px;
-    margin: 0 0 26px;
+}
+
+.controlsRule {
+    margin: 30px auto 26px;
 }
 
 .beatDot {
@@ -305,12 +308,83 @@
     color: var(--text-muted);
 }
 
+/* ---------- DESKTOP: three columns around the tempo readout ---------- */
+/*
+ * Phones keep the single-column flow above. From here the panel becomes a grid
+ * with named areas, so the source order stays natural while the display puts
+ * tempo controls left, the readout and transport centre, meter choice right.
+ */
+@media screen and (min-width: 1024px) {
+    .metro {
+        max-width: 1000px; /* lines up with the navbar and the tab bar */
+    }
+
+    .panel {
+        display: grid;
+        grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+        grid-template-rows: auto auto;
+        grid-template-areas:
+            'tempo card meter'
+            'tempo footer meter';
+        align-items: center;
+        align-content: start;
+        column-gap: 34px;
+        row-gap: 26px;
+        margin-top: 30px;
+    }
+
+    .tempoCard {
+        grid-area: card;
+        margin-bottom: 0;
+        padding: 30px 22px 26px;
+    }
+
+    .controlsTempo {
+        grid-area: tempo;
+    }
+
+    .controlsMeter {
+        grid-area: meter;
+    }
+
+    .centerFooter {
+        grid-area: footer;
+        justify-self: center;
+        width: 100%;
+    }
+
+    /* The divider only exists to separate stacked blocks on phones. */
+    .controlsRule {
+        display: none;
+    }
+
+    /* Chords are wider than the middle column, so the dots scale down. */
+    .beats {
+        gap: 10px;
+        min-height: 42px;
+    }
+
+    .beatDot {
+        width: 36px;
+        height: 36px;
+        font-size: 0.8rem;
+    }
+
+    .tempoValue {
+        font-size: clamp(3.4rem, 5.5vw, 5.2rem);
+    }
+
+    .shortcuts {
+        max-width: 100%;
+    }
+}
+
 /* ---------- ACTION ROW ---------- */
 .actions {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-top: 22px;
+    margin-top: 0;
     justify-content: center;
     flex-wrap: wrap;
 }

@@ -390,8 +390,18 @@ export default function Metronome() {
               </span>
             ))}
           </div>
+        </div>
 
-          <div className={styles.controls}>
+        {/*
+         * One DOM drives both layouts. Phones flow as a single column
+         * (tempo, controls, meter, play, shortcuts); from the desktop
+         * breakpoint this becomes a three-column grid of named areas — tempo
+         * controls on the left, the big readout and transport in the middle,
+         * meter choice on the right — so the eye never leaves the tempo. Key
+         * bindings only exist on a keyboard, so they stay hidden on phones.
+         */}
+        <div className={styles.panel}>
+          <div className={`${styles.controls} ${styles.controlsTempo}`}>
             <label className={styles.controlLabel} htmlFor="tempo-slider">Beats per minute</label>
             <div className={styles.sliderRow}>
               <input
@@ -444,11 +454,11 @@ export default function Metronome() {
                 {tapFeedback ? 'Tap again…' : 'Tap tempo'}
               </button>
             </div>
+
+            <hr className={`section-rule ${styles.controlsRule}`} />
           </div>
 
-          <hr className="section-rule" style={{ margin: '30px auto 26px' }} />
-
-          <div className={styles.controls}>
+          <div className={`${styles.controls} ${styles.controlsMeter}`}>
             <span className={styles.controlLabel} id="meter-label">Time signature</span>
             <div className={styles.meters} role="radiogroup" aria-labelledby="meter-label">
               {METERS.map((meter) => (
@@ -469,25 +479,27 @@ export default function Metronome() {
             </p>
           </div>
 
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.playBtn}
-              onClick={toggle}
-              aria-pressed={running}
-              disabled={Boolean(audioError)}
-            >
-              {running ? <StopIcon /> : <PlayIcon />}
-              <span>{running ? 'Stop' : 'Start'}</span>
-            </button>
-          </div>
+          <div className={styles.centerFooter}>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.playBtn}
+                onClick={toggle}
+                aria-pressed={running}
+                disabled={Boolean(audioError)}
+              >
+                {running ? <StopIcon /> : <PlayIcon />}
+                <span>{running ? 'Stop' : 'Start'}</span>
+              </button>
+            </div>
 
-          <div className={styles.shortcuts}>
-            <kbd>Space</kbd> start / stop &nbsp;·&nbsp;
-            <kbd>T</kbd> tap tempo &nbsp;·&nbsp;
-            <kbd>↑</kbd><kbd>↓</kbd> tempo ±1 &nbsp;·&nbsp;
-            <kbd>←</kbd><kbd>→</kbd> tempo ±5 &nbsp;·&nbsp;
-            <kbd>1</kbd>–<kbd>4</kbd> time signature
+            <div className={styles.shortcuts}>
+              <kbd>Space</kbd> start / stop &nbsp;·&nbsp;
+              <kbd>T</kbd> tap tempo &nbsp;·&nbsp;
+              <kbd>↑</kbd><kbd>↓</kbd> tempo ±1 &nbsp;·&nbsp;
+              <kbd>←</kbd><kbd>→</kbd> tempo ±5 &nbsp;·&nbsp;
+              <kbd>1</kbd>–<kbd>4</kbd> time signature
+            </div>
           </div>
         </div>
       </div>
