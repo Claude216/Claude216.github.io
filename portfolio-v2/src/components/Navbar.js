@@ -3,19 +3,23 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ThemeToggle from './ThemeToggle';
+import LanguageToggle from './LanguageToggle';
+import useLang from '@/lib/useLang';
+import { stringsFor } from '@/lib/i18n';
 import styles from './Navbar.module.css';
 
 const SECTIONS = [
-  { href: '#about', label: 'About' },
-  { href: '#news', label: 'News' },
-  { href: '#education', label: 'Education' },
-  { href: '#publications', label: 'Publications' },
-  { href: '#experience', label: 'Experience' },
-  { href: '#contact', label: 'Contact' },
+  { href: '#about', key: 'about' },
+  { href: '#news', key: 'news' },
+  { href: '#education', key: 'education' },
+  { href: '#publications', key: 'publications' },
+  { href: '#experience', key: 'experience' },
+  { href: '#contact', key: 'contact' },
 ];
 
 export default function Navbar({ active = null, transparent = false }) {
   const [scrolled, setScrolled] = useState(false);
+  const t = stringsFor(useLang()).nav;
 
   // Highlight the section currently in view, and (on the home page) turn the
   // transparent overlay bar into a solid bar once past the hero.
@@ -57,17 +61,20 @@ export default function Navbar({ active = null, transparent = false }) {
               data-section="true"
               className={`${styles.navLink} ${active === section.href.slice(1) ? styles.active : ''}`}
             >
-              {section.label}
+              {t[section.key]}
             </Link>
           ))}
           <Link
             href="/out-of-work"
             className={`${styles.navLink} ${styles.navExternal} ${active === 'out-of-work' ? styles.active : ''}`}
           >
-            Out Of Work
+            {t.outOfWork}
           </Link>
         </div>
-        <ThemeToggle />
+        <div className={styles.navControls}>
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
       </div>
     </nav>
   );

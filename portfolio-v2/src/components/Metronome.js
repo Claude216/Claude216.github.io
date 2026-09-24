@@ -39,6 +39,8 @@ import {
   voiceById,
   volumeCurve,
 } from '@/lib/metronome';
+import useLang from '@/lib/useLang';
+import { markingLabel, readLang, stringsFor } from '@/lib/i18n';
 import styles from './Metronome.module.css';
 
 const PlayIcon = () => (
@@ -71,6 +73,8 @@ export default function Metronome() {
   const [tempoText, setTempoText] = useState(null);
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE);
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
+  const lang = useLang();
+  const t = stringsFor(lang).metronome;
   // The meter the clicks are currently using. A change to the picker only takes
   // effect at the next bar line, so the dots follow this until then.
   const [playingBeats, setPlayingBeats] = useState(null);
@@ -419,7 +423,7 @@ export default function Metronome() {
   const start = useCallback(() => {
     if (runningRef.current) return;
     if (!ensureAudio()) {
-      setAudioError('Audio not supported in this browser');
+      setAudioError(stringsFor(readLang()).metronome.audioUnsupported);
       return;
     }
     const ctx = ctxRef.current;
@@ -601,24 +605,27 @@ export default function Metronome() {
 
       <div className={`${styles.metro} ${running ? styles.playing : ''}`}>
         <header className={styles.pageHead}>
-          <h1>Metronome</h1>
-          <p>My practice click for guitar — set the tempo, choose the feel, and go.</p>
+          <h1>{t.title}</h1>
+          <p>{t.intro}</p>
         </header>
 
         <div ref={cardWrapRef} className={styles.cardWrap}>
         <div className={styles.tempoCard}>
-          <span className={styles.tempoLabel}>Tempo</span>
+          <span className={styles.tempoLabel}>{t.tempo}</span>
           <div className={styles.tempoRow}>
             <span ref={tempoValueRef} className={styles.tempoValue}>{bpm}</span>
-            <span className={styles.tempoUnit}>BPM</span>
+            <span className={styles.tempoUnit}>{t.bpmUnit}</span>
           </div>
           <p className={styles.tempoSub}>
-            Marking: {marking} &middot; {beats}/4 feel
+            {t.marking}: {markingLabel(lang, marking) ? `${marking} · ${markingLabel(lang, marking)}` : marking}
+            {' · '}
+            {beats}
+            {t.feelUnit}
           </p>
 
           <p className={styles.status}>
             <span className={styles.statusDot} aria-hidden="true" />
-            <span>{audioError || (running ? 'Playing' : 'Stopped')}</span>
+            <span>{audioError || (running ? t.statusPlaying : t.statusStopped)}</span>
           </p>
 
           <div className={styles.beats} aria-hidden="true">
@@ -645,7 +652,7 @@ export default function Metronome() {
          */}
         <div className={styles.panel}>
           <div className={`${styles.controls} ${styles.controlsTempo}`}>
-            <label className={styles.controlLabel} htmlFor="tempo-slider">Beats per minute</label>
+            <label className={styles.controlLabel} htmlFor="tempo-slider">{t.beatsPerMinute}</label>
             <div className={styles.sliderRow}>
               <input
                 id="tempo-slider"
@@ -655,7 +662,7 @@ export default function Metronome() {
                 step="1"
                 value={bpm}
                 onChange={(event) => changeBpm(event.target.value)}
-                aria-label="Tempo in beats per minute"
+                aria-label={t.tempoSliderLabel}
               />
               <input
                 type="number"
@@ -675,7 +682,7 @@ export default function Metronome() {
                   setTempoText(null); // back to rendering the clamped state
                   if (next !== null) setBpmState(next);
                 }}
-                aria-label="Tempo value"
+                aria-label={t.tempoValueLabel}
               />
             </div>
 
@@ -694,13 +701,13 @@ export default function Metronome() {
 
             <div className={styles.actions}>
               <button type="button" className="btn-link compact" onClick={tapTempo}>
-                {tapFeedback ? 'Tap again…' : 'Tap tempo'}
+                {tapFeedback ? t.tapAgain : t.tapTempo}
               </button>
             </div>
 
             <hr className={`section-rule ${styles.controlsRule}`} />
 
-            <span className={styles.controlLabel} id="voice-label">Click sound</span>
+            <span className={styles.controlLabel} id="voice-label">{t.clickSound}</span>
             <div className={styles.voices} role="radiogroup" aria-labelledby="voice-label">
               {CLICK_VOICES.map((voice) => (
                 <button
@@ -716,12 +723,12 @@ export default function Metronome() {
               ))}
             </div>
             <p className={styles.fieldHint}>
-              {voiceById(voiceId)?.description || ''} — tapping a name plays it.
+              {voiceById(voiceId)?.description || ''} — {t.tapHint}
             </p>
           </div>
 
           <div className={`${styles.controls} ${styles.controlsMeter}`}>
-            <span className={styles.controlLabel} id="meter-label">Time signature</span>
+            <span className={styles.controlLabel} id="meter-label">{t.timeSignature}</span>
             <div className={styles.meters} role="radiogroup" aria-labelledby="meter-label">
               {METERS.map((meter) => (
                 <label key={meter} className={styles.meterOption}>
@@ -737,7 +744,7 @@ export default function Metronome() {
               ))}
             </div>
             <p className={styles.fieldHint}>
-              The first beat of every bar is accented — that is your downbeat. 6/8 counts six eighth notes.
+              {t.meterHint}
             </p>
           </div>
 
@@ -746,7 +753,7 @@ export default function Metronome() {
               <svg className={styles.volumeIcon} viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 10v4h4l5 4V6L7 10H3zm13.5 2c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4zM14 3.2v2.1c2.9.9 5 3.6 5 6.7s-2.1 5.8-5 6.7v2.1c4-1 7-4.6 7-8.8s-3-7.8-7-8.8z" />
               </svg>
-              Volume
+              {t.volume}
             </label>
             <div className={styles.sliderRow}>
               <input
@@ -757,13 +764,13 @@ export default function Metronome() {
                 step="1"
                 value={volume}
                 onChange={(event) => setVolume(Number(event.target.value))}
-                aria-label="Output volume"
+                aria-label={t.volumeSliderLabel}
                 aria-valuetext={`${volume}%`}
               />
               <span className={styles.volumeValue}>{volume}%</span>
             </div>
             <p className={styles.fieldHint}>
-              Clicks only — your guitar is not affected.
+              {t.volumeHint}
             </p>
           </div>
 
@@ -777,16 +784,16 @@ export default function Metronome() {
                 disabled={Boolean(audioError)}
               >
                 {running ? <StopIcon /> : <PlayIcon />}
-                <span>{running ? 'Stop' : 'Start'}</span>
+                <span>{running ? t.stop : t.start}</span>
               </button>
             </div>
 
             <div className={styles.shortcuts}>
-              <kbd>Space</kbd> start / stop &nbsp;·&nbsp;
-              <kbd>T</kbd> tap tempo &nbsp;·&nbsp;
-              <kbd>↑</kbd><kbd>↓</kbd> tempo ±1 &nbsp;·&nbsp;
-              <kbd>←</kbd><kbd>→</kbd> tempo ±5 &nbsp;·&nbsp;
-              <kbd>1</kbd>–<kbd>4</kbd> time signature
+              <kbd>Space</kbd> {t.shortcutsStartStop} &nbsp;·&nbsp;
+              <kbd>T</kbd> {t.shortcutsTap} &nbsp;·&nbsp;
+              <kbd>↑</kbd><kbd>↓</kbd> {t.shortcutsTempoOne} &nbsp;·&nbsp;
+              <kbd>←</kbd><kbd>→</kbd> {t.shortcutsTempoFive} &nbsp;·&nbsp;
+              <kbd>1</kbd>–<kbd>4</kbd> {t.shortcutsMeter}
             </div>
           </div>
         </div>

@@ -42,6 +42,13 @@
     flex-wrap: wrap;
 }
 
+.navControls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
 .navLink {
     position: relative;
     color: var(--nav-text);
@@ -52,11 +59,25 @@
     transition: color 0.25s ease;
 }
 
-.navTransparent .navLink {
+.navTransparent .navControls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.navLink {
     color: #ffffff;
 }
 
-.navTransparent.scrolled .navLink {
+.navTransparent.scrolled .navControls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.navLink {
     color: var(--nav-text);
 }
 
@@ -92,6 +113,20 @@
     background-color: var(--accent);
 }
 
+/* The language chip inherits colour from the bar it sits in, like the theme
+   toggle next to it. */
+.navControls :global(.lang-toggle) {
+    color: var(--nav-text);
+}
+
+.navTransparent .navControls :global(.lang-toggle) {
+    color: #ffffff;
+}
+
+.navTransparent.scrolled .navControls :global(.lang-toggle) {
+    color: var(--nav-text);
+}
+
 /* The theme toggle inherits colour from the bar it sits in. */
 .navTransparent .navInner :global(.theme-toggle) {
     color: #ffffff;
@@ -106,7 +141,14 @@
         padding: 0 16px;
     }
 
-    .navLink {
+    .navControls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.navLink {
         padding: 14px 9px;
         font-size: 0.85rem;
     }

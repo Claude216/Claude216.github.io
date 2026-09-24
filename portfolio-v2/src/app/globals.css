@@ -226,6 +226,36 @@ main section {
   border-radius: 20px;
 }
 
+/* ---------- Language toggle ---------- */
+.lang-toggle {
+  appearance: none;
+  background: none;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--nav-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 5px 10px;
+  min-width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.25s ease, background-color 0.25s ease, transform 0.15s ease;
+}
+
+.lang-toggle:hover {
+  background-color: var(--accent-soft);
+}
+
+.lang-toggle:active {
+  transform: scale(0.94);
+}
+
 /* ---------- Theme toggle ---------- */
 .theme-toggle {
   background: none;
