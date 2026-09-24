@@ -415,6 +415,22 @@ function runClicks({ bpm, meter = 4, select, startAt = 0, clicks = 12 }) {
   return out;
 }
 
+/*
+ * Rebuild the schedule the transport keeps. It always runs one click ahead of
+ * the audio clock: queuing click n promotes click n-1 from `queued` to
+ * `playing`, and click n stays `queued` until the clock reaches it.
+ *
+ * So the state produced while queuing click n is { playing: click n-1,
+ * queued: click n }, plus a leading entry with no sounding beat yet.
+ */
+function timeline(clicks) {
+  const states = [{ playing: null, queued: clicks[0] }];
+  clicks.forEach((click, index) => {
+    if (index > 0) states.push({ playing: clicks[index - 1], queued: click });
+  });
+  return states;
+}
+
 test('the transport accents the first beat of every bar', () => {
   const clicks = runClicks({ bpm: 60, meter: 4 });
   assert.deepEqual(clicks.map((c) => c.beat), [1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4]);
@@ -474,12 +490,16 @@ test('a slower meter change is applied without dropping or doubling a beat', () 
   assert.equal(clicks[6].beatsPerBar, 2);
 });
 
-test('the flashed beat matches what was queued, per click', () => {
-  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 3 ? 4 : 3) });
-  clicks.forEach((state) => {
-    const schedule = state;
-    // The instant the click sounds, and just before the next one:
-    assert.equal(beatAtListedTime(schedule, state.at), state.beat);
+test('each click flashes its own beat when it sounds', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 3 ? 4 : 3), clicks: 10 });
+  timeline(clicks).slice(1).forEach((schedule, index) => {
+    const state = clicks[index];
+    assert.equal(
+      beatAtListedTime(schedule, state.at),
+      state.beat,
+      `click ${index + 1} flashed the wrong beat when it sounded`,
+    );
+    // And it stays lit until the next click is due.
     assert.equal(
       beatAtListedTime(schedule, state.at + state.duration * 0.99),
       state.beat,
@@ -488,38 +508,65 @@ test('the flashed beat matches what was queued, per click', () => {
   });
 });
 
-test('the flashed beat flips onto the next click, not near it', () => {
-  const schedule = { at: 2, beat: 2, duration: 0.5, beatsPerBar: 4 };
-  assert.equal(beatAtListedTime(schedule, 2), 2);
-  assert.equal(beatAtListedTime(schedule, 2.499), 2);
-  assert.equal(beatAtListedTime(schedule, 2.5), 3, 'flips exactly on the click');
+test('a beat is not lit before it sounds', () => {
+  /*
+   * Regression: the transport runs one click ahead of the clock, and an earlier
+   * version resolved the beat against the click just queued. Between the moment
+   * a click is queued and the moment it sounds, no interval matched, so the
+   * resolver returned null and nothing was lit at all.
+   */
+  const clicks = runClicks({ bpm: 60, meter: 4, clicks: 3 });
+  const schedules = timeline(clicks);
+  const second = schedules[1]; // playing = click 1, queued = click 2
+  assert.ok(second.playing && second.queued, 'this entry has a sounding and a queued beat');
+
+  // Queued but not yet sounded: the previous beat is still the lit one.
+  assert.equal(beatAtListedTime(second, second.queued.at - 0.01), 1);
+  // Once the clock reaches it, it takes over.
+  assert.equal(beatAtListedTime(second, second.queued.at), 2);
 });
 
-test('the flashed beat wraps within the current meter', () => {
-  const schedule = { at: 0, beat: 3, duration: 1, beatsPerBar: 4 };
+test('nothing is lit before the first click sounds', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, clicks: 2 });
+  // Before any click: `playing` is null and the first click is still queued.
+  const beforeFirst = timeline(clicks)[0];
+  assert.equal(beatAtListedTime(beforeFirst, 0), null);
+  assert.equal(beatAtListedTime(beforeFirst, beforeFirst.queued.at - 0.001), null);
+  // The instant it sounds it lights up, even before the next scheduler tick has
+  // had a chance to promote it out of `queued`.
+  assert.equal(beatAtListedTime(beforeFirst, beforeFirst.queued.at), 1);
+  assert.equal(beatAtListedTime(null, 5), null);
+});
+
+test('the lit beat still advances if the clock runs past the queued click', () => {
+  // A tempo change can leave the queued click further away than one beat; the
+  // flash must keep counting from the sounding beat rather than freezing.
+  const state = { at: 1, beat: 2, duration: 1, beatsPerBar: 4 };
+  const schedule = { playing: state, queued: { at: 4, beat: 3, duration: 1, beatsPerBar: 4 } };
+  assert.equal(beatAtListedTime(schedule, 1), 2);
+  assert.equal(beatAtListedTime(schedule, 2.5), 3, 'advances by whole beats');
+  assert.equal(beatAtListedTime(schedule, 4), 3, 'and hands over to the queued beat on time');
+});
+
+test('the lit beat wraps within the current meter', () => {
+  const fourFour = { at: 0, beat: 3, duration: 1, beatsPerBar: 4, nextBeat: 4 };
+  const schedule = { playing: fourFour, queued: null };
   assert.equal(beatAtListedTime(schedule, 0), 3);
   assert.equal(beatAtListedTime(schedule, 1), 4);
   assert.equal(beatAtListedTime(schedule, 2), 1);
 
-  // A beat queued under 3/4 wraps after beat 3, and a beat still in flight when
-  // the player switches keeps counting in the meter it was queued under.
-  const threeFour = { at: 0, beat: 3, duration: 1, beatsPerBar: 3 };
-  assert.equal(beatAtListedTime(threeFour, 1), 1, 'wraps after beat 3 in 3/4');
-});
-
-test('nothing is lit before the first click', () => {
-  // The transport reports beat 0 until a click has been queued.
-  assert.equal(beatAtListedTime({ at: -1, beat: 0, duration: 1, beatsPerBar: 4 }, 5), null);
-  // And a click queued in the future is not lit yet.
-  const schedule = { at: 10, beat: 1, duration: 1, beatsPerBar: 4 };
-  assert.equal(beatAtListedTime(schedule, 9.99), null);
-  assert.equal(beatAtListedTime(schedule, 10), 1);
+  const threeFour = { at: 0, beat: 3, duration: 1, beatsPerBar: 3, nextBeat: 1 };
+  assert.equal(beatAtListedTime({ playing: threeFour, queued: null }, 1), 1, 'wraps after beat 3 in 3/4');
 });
 
 test('beatAtListedTime tolerates a missing or degenerate schedule', () => {
   assert.equal(beatAtListedTime(null, 1), null);
   assert.equal(beatAtListedTime(undefined, 1), null);
-  assert.equal(beatAtListedTime({ at: 0, beat: 2, duration: 0, beatsPerBar: 4 }, 5), 2);
+  assert.equal(beatAtListedTime({ playing: null, queued: null }, 1), null);
+  assert.equal(
+    beatAtListedTime({ playing: { at: 0, beat: 2, duration: 0, beatsPerBar: 4 }, queued: null }, 5),
+    2,
+  );
 });
 
 test('a nonsensical stored beat counter is recovered rather than mis-accented', () => {
@@ -560,9 +607,10 @@ test('every beat is flashed as the beat that sounds', () => {
   // The whole point of the fix: across a meter change, the lit dot, the beat
   // number and the accent all agree at the instant each click fires.
   const clicks = runClicks({ bpm: 100, meter: 4, select: (i) => (i < 3 ? 4 : 3), clicks: 10 });
-  clicks.forEach((state, index) => {
+  timeline(clicks).slice(1).forEach((schedule, index) => {
+    const state = clicks[index];
     assert.equal(
-      beatAtListedTime(state, state.at),
+      beatAtListedTime(schedule, state.at),
       state.beat,
       `click ${index + 1} flashed the wrong beat`,
     );

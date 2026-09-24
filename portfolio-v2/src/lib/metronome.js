@@ -155,14 +155,40 @@ export function nextBeatState(lastBeatAt, currentBeat, bpm, beatsPerBar) {
  * click rather than near it.
  */
 export function beatAtListedTime(schedule, when) {
-  if (!schedule || !(schedule.at >= 0)) return null;
-  if (!(when >= schedule.at)) return null;
-  const duration = schedule.duration;
-  const beatsPerBar = schedule.beatsPerBar;
-  if (!(duration > 0) || !(beatsPerBar > 0)) return schedule.beat;
-  const ticks = Math.floor((when - schedule.at) / duration);
-  if (ticks <= 0) return schedule.beat;
-  return ((schedule.beat - 1 + ticks) % beatsPerBar) + 1;
+  if (!schedule) return null;
+
+  /*
+   * The scheduler holds exactly one click queued ahead of the audio clock, so at
+   * any moment there is a beat that is sounding and a beat that is a fraction of
+   * a second away. The signal that a queued click has arrived is the clock
+   * reaching `queued.at`, and only then does it become the sounding beat — it
+   * must not be lit before that, or the flash leads the click.
+   */
+  const { playing, queued } = schedule;
+  const queuedHasArrived = queued && queued.at >= 0 && when >= queued.at;
+
+  // Nothing has sounded yet: either no click is queued, or the first one is
+  // still ahead of the clock.
+  if (!playing || !(playing.at >= 0)) {
+    return queuedHasArrived ? queued.beat : null;
+  }
+
+  if (queuedHasArrived) {
+    const beatsPerBar = queued.beatsPerBar;
+    const duration = queued.duration;
+    if (!(duration > 0) || !(beatsPerBar > 0)) return queued.beat;
+    // Whole beats since it struck, in case the clock ran on (a tempo change).
+    const ticks = Math.floor((when - queued.at) / duration);
+    if (ticks <= 0) return queued.beat;
+    return ((queued.beat - 1 + ticks) % beatsPerBar) + 1;
+  }
+
+  const beatsPerBar = playing.beatsPerBar;
+  const duration = playing.duration;
+  if (!(duration > 0) || !(beatsPerBar > 0)) return playing.beat;
+  const ticks = Math.floor((when - playing.at) / duration);
+  if (ticks <= 0) return playing.beat;
+  return ((playing.beat - 1 + ticks) % beatsPerBar) + 1;
 }
 
 /**

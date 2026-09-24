@@ -25,7 +25,6 @@ import {
   TAP_TIMEOUT_MS,
   TIMER_MS,
   beatAtListedTime,
-  beatInterval,
   bpmFromTaps,
   clampBpm,
   VOLUME_MAX,
@@ -82,13 +81,16 @@ export default function Metronome() {
   const animationIdRef = useRef(null);
   const runningRef = useRef(false);
   /*
-   * The scheduler records when it queued each click and which beat of the bar
-   * that was. The visual reads this instead of recomputing a beat from elapsed
-   * time — an elapsed-time model silently assumes a constant tempo and an
-   * unchanging meter, so changing either mid-playback used to slide the flash
-   * away from the sound.
+   * The last click queued and the one before it. The scheduler always runs one
+   * click ahead of the audio clock, so the visual needs both ends: `queued` is
+   * the beat about to sound and `playing` is the one currently sounding, which
+   * only becomes `queued` when the clock actually reaches it.
+   *
+   * The visual reads this instead of recomputing a beat from elapsed time — an
+   * elapsed-time model silently assumes a constant tempo and an unchanging
+   * meter, so changing either mid-playback slid the flash away from the sound.
    */
-  const beatScheduleRef = useRef({ at: -1, beat: 0, duration: 60 / DEFAULT_BPM });
+  const beatScheduleRef = useRef({ playing: null, queued: null });
   const playingBeatsRef = useRef(null);
   // The meter the bar currently being played belongs to. Held for the whole bar
   // so a mid-bar change to the picker cannot shorten a bar already running, then
@@ -306,7 +308,9 @@ export default function Metronome() {
       click(state.at, state.beat === 1);
       lastScheduledAtRef.current = state.at;
       currentBeatRef.current = state.nextBeat;
-      beatScheduleRef.current = state;
+      // The click just queued becomes the sounding one; the previous sounding
+      // beat is kept because it stays lit until this one is due.
+      beatScheduleRef.current = { playing: beatScheduleRef.current.queued, queued: state };
       if (state.beatsPerBar !== playingBeatsRef.current) {
         playingBeatsRef.current = state.beatsPerBar;
         setPlayingBeats(state.beatsPerBar);
@@ -348,7 +352,7 @@ export default function Metronome() {
     // from the audio clock, the same clock the clicks are queued against.
     barMeterRef.current = null;
     barStartRef.current = true;
-    beatScheduleRef.current = { at: -1, beat: 0, duration: beatInterval(bpmRef.current), beatsPerBar: beatsRef.current };
+    beatScheduleRef.current = { playing: null, queued: null };
     setActiveBeat(null);
   }, []);
 
