@@ -1,0 +1,390 @@
+/* Ported from the static site's metronome.html so both builds look identical. */
+
+/* ---------- PAGE + LAYOUT ---------- */
+.metro {
+    max-width: 700px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 44px 24px 56px;
+}
+
+.pageHead {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.pageHead h1 {
+    font-size: clamp(1.9rem, 5vw, 2.5rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+}
+
+.pageHead p {
+    margin: 0 auto;
+    max-width: 480px;
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+/* ---------- TEMPO CARD ---------- */
+.tempoCard {
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 34px 24px 28px;
+    text-align: center;
+}
+
+.tempoCard::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.75;
+}
+
+.tempoLabel {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.tempoRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 12px;
+    margin: 6px 0 4px;
+}
+
+.tempoValue {
+    font-size: clamp(4.4rem, 17vw, 7rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--heading);
+    font-variant-numeric: tabular-nums;
+    transition: color 0.2s ease;
+}
+
+.playing .tempoValue { color: var(--accent); }
+
+.tempoUnit {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.tempoSub {
+    margin: 0 0 24px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* ---------- STATUS ---------- */
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 22px;
+}
+
+.statusDot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.5;
+}
+
+.playing .statusDot {
+    background: var(--accent);
+    opacity: 1;
+    animation: statusBlink 1s steps(2, end) infinite;
+}
+
+@keyframes statusBlink { 50% { opacity: 0.25; } }
+
+/* ---------- BEAT DOTS ---------- */
+.beats {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    min-height: 48px;
+    margin: 0 0 26px;
+}
+
+.beatDot {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.beatDot.downbeat { border-color: var(--accent); color: var(--accent); }
+
+.beatDot.active {
+    transform: scale(1.16);
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 0 0 6px var(--accent-soft);
+}
+
+/* ---------- CONTROLS ---------- */
+.controlLabel {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.sliderRow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.sliderRow input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 28px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.sliderRow input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+}
+
+.sliderRow input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+}
+
+.sliderRow input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -9px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--card-bg);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.sliderRow input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--card-bg);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+
+.sliderRow input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.08); }
+.sliderRow input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+
+.sliderRow input[type="number"] {
+    width: 82px;
+    padding: 8px 10px;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.sliderRow input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.presets button {
+    padding: 7px 14px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.presets button:hover { color: var(--accent); border-color: var(--accent); }
+
+.presets button[aria-pressed="true"] {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ---------- METER CHOICES ---------- */
+.meters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.meterOption { position: relative; }
+
+.meterOption input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.meterOption span {
+    display: block;
+    padding: 11px 20px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.meterOption span:hover { color: var(--accent); border-color: var(--accent); }
+
+.meterOption input:checked + span {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.meterOption input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fieldHint {
+    margin: 10px 0 0;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+}
+
+/* ---------- ACTION ROW ---------- */
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 22px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.playBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 46px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #ffffff;
+    background: var(--accent);
+    border: none;
+    border-radius: 32px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px var(--accent-soft), var(--shadow);
+    transition: transform 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
+}
+
+.playBtn:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.playBtn:active { transform: translateY(0); }
+
+.playBtn:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 3px; }
+
+.playBtn .icon {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.playBtn .iconStop { display: none; }
+
+.playing .playBtn .iconPlay { display: none; }
+.playing .playBtn .iconStop { display: block; }
+
+.playing .playBtn {
+    background: var(--heading);
+    color: var(--card-bg);
+}
+
+/* ---------- SHORTCUTS ---------- */
+.shortcuts {
+    margin: 26px auto 0;
+    padding: 16px 20px;
+    max-width: 480px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Scoped so it stays a pure selector (CSS Modules forbids a bare element rule). */
+.shortcuts kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 2px 7px;
+    margin: 0 2px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .beatDot { transition: none; }
+    .beatDot.active { transform: none; }
+    .playing .statusDot { animation: none; }
+    .playBtn:hover { transform: none; }
+}
+    

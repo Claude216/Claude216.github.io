@@ -1,0 +1,41 @@
+/* Ported from the static site's Experience list (index.html). */
+.experienceList {
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+.experienceItem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    padding: 16px 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.experienceItem:last-child {
+    border-bottom: none;
+}
+
+.experienceTitle {
+    font-weight: 700;
+    color: var(--heading);
+}
+
+.experienceOrg {
+    color: var(--text-muted);
+}
+
+.experiencePeriod {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+@media screen and (max-width: 768px) {
+    .experiencePeriod {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
+}

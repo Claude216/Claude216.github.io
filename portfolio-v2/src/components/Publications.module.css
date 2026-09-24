@@ -1,0 +1,43 @@
+/* Ported from the static site's publication cards (index.html). */
+.publication {
+    max-width: 860px;
+    margin: 0 auto 20px;
+    padding: 20px 24px;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.publicationYear {
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+}
+
+.publicationTitle {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.publicationAuthors {
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.publicationVenue {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.publicationLinks {
+    margin-top: 6px;
+}
+
+.publicationLinks a {
+    margin-right: 10px;
+}

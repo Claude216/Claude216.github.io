@@ -1,0 +1,25 @@
+{
+  "name": "Lunxiao (Claude) Li",
+  "title": "Ph.D. Student in Computer Science, North Carolina State University",
+  "university": "North Carolina State University",
+  "tagline": "Ph.D. Student in Computer Science @ North Carolina State University",
+  "email": {
+    "academic": "lli66@ncsu.edu",
+    "personal": "llxclaude126@gmail.com"
+  },
+  "phone": "(408) 439-2159",
+  "linkedin": "https://www.linkedin.com/in/lunxiao-li-7709b6229/",
+  "github": "https://github.com/Claude216",
+  "cv": "/LunxiaoLi_CV.pdf",
+  "about": [
+    "Hi, my name is Lunxiao Li and I am a Ph.D. student in Computer Science at North Carolina State University. I am interested in Large Language Model (LLM) related topics, with a focus on the applications of LLMs in Computer Science."
+  ],
+  "keywords": ["Large Language Models", "LLM Applications", "Machine Learning"],
+  "news": [
+    {
+      "date": "Aug 2025",
+      "content": "Started my graduate study at North Carolina State University, and joined CSC 422 (Automated Learning and Data Analysis) as a Teaching Assistant!"
+    }
+  ],
+  "contactLead": "Feel free to reach out about research, collaboration, or anything else — the best way to contact me is by email."
+}

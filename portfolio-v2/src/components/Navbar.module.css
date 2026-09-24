@@ -1,0 +1,117 @@
+/* Solid, sticky bar — used by the inner pages (Out Of Work, Metronome). */
+.navbar {
+    position: sticky;
+    top: 0;
+    background-color: var(--nav-bg);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+    z-index: 100;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Over the home hero: transparent overlay with light links. */
+.navTransparent {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+/* Once past the hero it becomes the same solid bar. */
+.navTransparent.scrolled {
+    background-color: var(--nav-bg);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+}
+
+.navInner {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.navLinks {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.navLink {
+    position: relative;
+    color: var(--nav-text);
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 16px 14px;
+    white-space: nowrap;
+    transition: color 0.25s ease;
+}
+
+.navTransparent .navLink {
+    color: #ffffff;
+}
+
+.navTransparent.scrolled .navLink {
+    color: var(--nav-text);
+}
+
+.navLink:hover {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+/* the "page away" tab carries a dot on every page */
+.navExternal::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    right: 4px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: var(--accent);
+}
+
+.active {
+    color: var(--accent);
+}
+
+.active::after {
+    content: '';
+    position: absolute;
+    bottom: 8px;
+    left: 14px;
+    right: 14px;
+    height: 3px;
+    border-radius: 2px;
+    background-color: var(--accent);
+}
+
+/* The theme toggle inherits colour from the bar it sits in. */
+.navTransparent .navInner :global(.theme-toggle) {
+    color: #ffffff;
+}
+
+.navTransparent.scrolled .navInner :global(.theme-toggle) {
+    color: var(--nav-text);
+}
+
+@media screen and (max-width: 768px) {
+    .navInner {
+        padding: 0 16px;
+    }
+
+    .navLink {
+        padding: 14px 9px;
+        font-size: 0.85rem;
+    }
+
+    .navExternal::before {
+        right: 2px;
+    }
+}

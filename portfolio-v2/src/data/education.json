@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "period": "2025 \u2013 Present",
+        "degree": "Ph.D. Student in Computer Science",
+        "school": "North Carolina State University",
+        "logo": "/images/ncsu.png",
+        "website": "https://www.ncsu.edu/"
+    },
+    {
+        "id": 2,
+        "period": "2021 \u2013 2023",
+        "degree": "Bachelor of Science in Computer Science",
+        "school": "University of California, Santa Cruz",
+        "logo": "/images/ucsc_icon.jpg",
+        "website": "https://www.ucsc.edu/"
+    },
+    {
+        "id": 3,
+        "period": "2020 \u2013 2021",
+        "degree": "Associate of Science in Computer Information Systems",
+        "school": "Mission College",
+        "logo": "/images/mission_college_icon.png",
+        "website": "https://missioncollege.edu/"
+    }
+]

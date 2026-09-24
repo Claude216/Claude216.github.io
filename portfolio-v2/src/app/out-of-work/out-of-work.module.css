@@ -1,0 +1,78 @@
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.card {
+    display: block;
+    padding: 24px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    color: var(--text);
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+.card h3 {
+    margin: 0 0 6px;
+    font-size: 1.15rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.arrow {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 700;
+    transition: transform 0.25s ease;
+}
+
+.card:hover .arrow {
+    transform: translateX(4px);
+}
+
+.card p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.beatGlyph {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.beatGlyph span {
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: glyphPulse 1.6s ease-in-out infinite;
+}
+
+.beatGlyph span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+.beatGlyph span:nth-child(2) { height: 18px; animation-delay: 0.2s; }
+.beatGlyph span:nth-child(3) { height: 12px; animation-delay: 0.4s; }
+.beatGlyph span:nth-child(4) { height: 16px; animation-delay: 0.6s; }
+
+@keyframes glyphPulse {
+    0%, 100% { transform: scaleY(0.6); opacity: 0.6; }
+    50%      { transform: scaleY(1);   opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .beatGlyph span {
+        animation: none;
+    }
+}

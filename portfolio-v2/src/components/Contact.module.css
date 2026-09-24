@@ -1,0 +1,54 @@
+/* Ported from the static site's "Get In Touch" section (index.html). */
+.contactSection {
+    text-align: center;
+}
+
+.contactLead {
+    font-size: 1.15rem;
+    max-width: 640px;
+    margin: 0 auto 24px;
+}
+
+.contactLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    justify-content: center;
+}
+
+.contactLinks a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-weight: 600;
+    box-shadow: var(--shadow);
+    transition: transform 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+.contactLinks a:hover {
+    transform: translateY(-3px);
+    color: var(--accent);
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+.contactLinks svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .contactLinks a {
+        transition: none;
+    }
+
+    .contactLinks a:hover {
+        transform: none;
+    }
+}

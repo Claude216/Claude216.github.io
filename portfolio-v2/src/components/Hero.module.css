@@ -1,0 +1,186 @@
+/* ---------- HERO — full-viewport animated gradient (matches index.html) ---------- */
+.hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 80px 24px 60px;
+    background: linear-gradient(136deg, #2c3e50, #3498db, #16a085, #8e44ad, #2980b9);
+    background-size: 1200% 1200%;
+    animation: gradientShift 24s ease infinite;
+    position: relative;
+}
+
+@keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.hero h1 {
+    color: #ffffff;
+    font-size: clamp(2.4rem, 8vw, 5rem);
+    font-weight: 800;
+    margin: 0 0 10px;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+}
+
+.tagline {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: clamp(1rem, 2.6vw, 1.35rem);
+    font-weight: 400;
+    min-height: 2.4em;
+    max-width: 720px;
+    margin: 0 auto 28px;
+}
+
+.cursor {
+    display: inline-block;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.9);
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+.heroIcons {
+    display: flex;
+    gap: 22px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.heroIcons a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    color: #ffffff;
+    transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+.heroIcons a:hover {
+    transform: translateY(-4px);
+    background-color: rgba(255, 255, 255, 0.18);
+    text-decoration: none;
+}
+
+.heroIcons svg {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+}
+
+.cvBadge {
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.scrollHint {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.85);
+    animation: bob 2s ease-in-out infinite;
+}
+
+.scrollHint svg {
+    width: 30px;
+    height: 30px;
+    fill: currentColor;
+}
+
+@keyframes bob {
+    0%, 100% { transform: translate(-50%, 0); }
+    50%      { transform: translate(-50%, 8px); }
+}
+
+/* ---------- ABOUT ---------- */
+.aboutContainer {
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+}
+
+.profilePic {
+    flex: 0 0 260px;
+}
+
+.profilePic img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.aboutContent {
+    flex: 1;
+}
+
+.aboutContent h3 {
+    margin-top: 0;
+    font-size: 1.4rem;
+}
+
+/* ---------- NEWS ---------- */
+.newsList {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-left: 0;
+    list-style: none;
+}
+
+.newsList li {
+    display: flex;
+    gap: 18px;
+    padding: 12px 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.newsList li:last-child {
+    border-bottom: none;
+}
+
+.newsDate {
+    flex: 0 0 110px;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+@media screen and (max-width: 768px) {
+    .aboutContainer {
+        flex-direction: column;
+    }
+
+    .profilePic {
+        margin: 0 auto;
+        max-width: 280px;
+    }
+
+    .newsList li {
+        flex-direction: column;
+        gap: 2px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero {
+        animation: none;
+    }
+
+    .scrollHint {
+        animation: none;
+    }
+}
