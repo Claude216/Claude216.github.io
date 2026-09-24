@@ -264,6 +264,46 @@
     border-color: var(--accent);
 }
 
+/* ---------- CLICK SOUND PICKER ---------- */
+.voices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.voiceOption {
+    padding: 7px 14px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-muted);
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.voiceOption:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.voiceOption:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.voiceOptionActive {
+    color: #ffffff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.voiceOptionActive:hover {
+    color: #ffffff;
+}
+
 /* ---------- METER CHOICES ---------- */
 .meters {
     display: flex;

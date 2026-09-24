@@ -26,6 +26,89 @@ export const TAP_MAX_SAMPLES = 6;
  * saved tempo carries over. */
 export const STORE_BPM = 'lowork.bpm';
 export const STORE_SETTINGS = 'lowork.settings';
+export const STORE_VOICE = 'lowork.voice';
+
+/*
+ * Click voices.
+ *
+ * Each click is synthesised from an envelope plus either a pair of sine
+ * partials (a struck body) or a burst of filtered noise (a struck surface),
+ * or both. Sine pairs use inharmonic ratios — a real percussion body rings
+ * with partials that are not integer multiples — which is why they read as a
+ * block being hit rather than as a beep being played.
+ *
+ * `ratio` raises the downbeat above the other beats so the start of the bar is
+ * audible; `filter` shapes the noise burst in Hz.
+ */
+export const DEFAULT_VOICE = 'wood';
+
+export const CLICK_VOICES = [
+  {
+    id: 'wood',
+    label: 'Wood',
+    description: 'Warm wooden block — the closest to a real metronome',
+    noise: { level: -16, attack: 0.001, decay: 0.018, filter: { type: 'bandpass', frequency: 1900, q: 1.1 } },
+    partials: [
+      { frequency: 700, ratio: 1.3, level: -13, attack: 0.001, decay: 0.055 },
+      { frequency: 1960, ratio: 1.18, level: -19, attack: 0.001, decay: 0.03 },
+    ],
+  },
+  {
+    id: 'clave',
+    label: 'Clave',
+    description: 'Hard bright stick click that cuts through a guitar',
+    noise: { level: -15, attack: 0.001, decay: 0.012, filter: { type: 'bandpass', frequency: 2600, q: 1.5 } },
+    partials: [
+      { frequency: 2140, ratio: 1.25, level: -7, attack: 0.001, decay: 0.035 },
+    ],
+  },
+  {
+    id: 'tick',
+    label: 'Tick',
+    description: 'Soft filtered tick for quiet practice',
+    noise: { level: -5, attack: 0.002, decay: 0.022, filter: { type: 'highpass', frequency: 3200, q: 0.7 } },
+  },
+  {
+    id: 'beep',
+    label: 'Beep',
+    description: 'Clean electronic tone, no noise',
+    partials: [
+      { frequency: 1000, ratio: 1.5, level: -8, attack: 0.002, decay: 0.06 },
+    ],
+  },
+  {
+    id: 'snare',
+    label: 'Rim',
+    description: 'Short rimshot — noise plus a metallic tone',
+    noise: { level: -13, attack: 0.001, decay: 0.045, filter: { type: 'bandpass', frequency: 2000, q: 0.9 } },
+    partials: [
+      { frequency: 430, ratio: 1.35, level: -15, attack: 0.001, decay: 0.03 },
+    ],
+  },
+];
+
+export function isVoiceId(value) {
+  return CLICK_VOICES.some((voice) => voice.id === value);
+}
+
+export function voiceById(value) {
+  return CLICK_VOICES.find((voice) => voice.id === value) || null;
+}
+
+/** Decibels to a linear gain multiplier, relative to 1. */
+export function gainFromDb(db) {
+  return 10 ** (Number(db) / 20);
+}
+
+/** Read a stored click voice; null when nothing usable is stored. */
+export function loadStoredVoice(storage = globalThis.localStorage) {
+  try {
+    const saved = storage.getItem(STORE_VOICE);
+    return isVoiceId(saved) ? saved : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 /* Conventional tempo markings, as [lower bound, upper bound, name]. */
 export const MARKINGS = [

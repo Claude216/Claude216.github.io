@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CLICK_VOICES,
   DEFAULT_BEATS,
+  DEFAULT_VOICE,
   DEFAULT_BPM,
   MARKINGS,
   MAX_BPM,
@@ -21,6 +23,10 @@ import {
   beatDuration,
   bpmFromTaps,
   clampBpm,
+  gainFromDb,
+  isVoiceId,
+  loadStoredVoice,
+  voiceById,
   loadStoredBeats,
   loadStoredBpm,
   markingFor,
@@ -168,4 +174,139 @@ test('blocked storage degrades to null instead of throwing', () => {
   };
   assert.equal(loadStoredBpm(hostile), null);
   assert.equal(loadStoredBeats(hostile), null);
+});
+
+test('every click voice is playable and distinct', () => {
+  assert.ok(CLICK_VOICES.length >= 3, 'there should be a real choice of sounds');
+
+  const ids = CLICK_VOICES.map((voice) => voice.id);
+  assert.equal(new Set(ids).size, ids.length, 'voice ids must be unique');
+
+  const labels = CLICK_VOICES.map((voice) => voice.label);
+  assert.equal(new Set(labels).size, labels.length, 'voice labels must be unique');
+
+  CLICK_VOICES.forEach((voice) => {
+    assert.ok(voice.label, `${voice.id} needs a label`);
+    assert.ok(voice.description, `${voice.id} needs a description for the hint line`);
+    assert.ok(voice.noise || voice.partials, `${voice.id} must make a sound`);
+  });
+});
+
+test('voice synthesis parameters are sane', () => {
+  CLICK_VOICES.forEach((voice) => {
+    if (voice.noise) {
+      assert.ok(voice.noise.decay > 0, `${voice.id} noise decay must be positive`);
+      assert.ok(voice.noise.attack > 0, `${voice.id} needs a non-zero attack ramp`);
+      assert.ok(
+        voice.noise.attack <= voice.noise.decay,
+        `${voice.id} attack must not outlast the decay`,
+      );
+      assert.ok(voice.noise.filter.frequency > 0, `${voice.id} needs a filter frequency`);
+      assert.ok(['lowpass', 'highpass', 'bandpass'].includes(voice.noise.filter.type));
+    }
+
+    (voice.partials || []).forEach((partial) => {
+      assert.ok(partial.frequency > 0, `${voice.id} partial needs a frequency`);
+      assert.ok(partial.ratio >= 1, `${voice.id} accent ratio should not lower the pitch`);
+      assert.ok(partial.decay > 0, `${voice.id} partial decay must be positive`);
+      assert.ok(partial.attack > 0, `${voice.id} partial needs a non-zero attack ramp`);
+    });
+  });
+});
+
+test('a metronome click is short enough not to smear into the next beat', () => {
+  // At the fastest tempo a beat lasts 60/280 s ≈ 214 ms; a click ringing longer
+  // than that would bleed across beats.
+  const fastestBeatS = 60 / MAX_BPM;
+  CLICK_VOICES.forEach((voice) => {
+    const tails = [];
+    if (voice.noise) tails.push(voice.noise.decay);
+    (voice.partials || []).forEach((partial) => tails.push(partial.decay));
+    assert.ok(
+      Math.max(...tails) <= fastestBeatS,
+      `${voice.id} rings for ${Math.max(...tails)}s, longer than the fastest beat`,
+    );
+  });
+});
+
+test('the default voice exists and is selectable', () => {
+  assert.ok(isVoiceId(DEFAULT_VOICE));
+  assert.equal(voiceById(DEFAULT_VOICE).id, DEFAULT_VOICE);
+});
+
+test('unknown voice ids are rejected rather than guessed', () => {
+  assert.equal(isVoiceId('laser'), false);
+  assert.equal(isVoiceId(''), false);
+  assert.equal(isVoiceId(null), false);
+  assert.equal(isVoiceId(undefined), false);
+  assert.equal(voiceById('laser'), null);
+});
+
+test('gainFromDb converts decibels to a linear multiplier', () => {
+  assert.equal(gainFromDb(0), 1);
+  assert.ok(Math.abs(gainFromDb(-6) - 0.5011872336) < 1e-9);
+  assert.ok(Math.abs(gainFromDb(-20) - 0.1) < 1e-12);
+  assert.ok(gainFromDb(-40) < gainFromDb(-20), 'quieter means smaller');
+  assert.ok(gainFromDb(-20) < gainFromDb(0));
+});
+
+test('stored voice is read back, unknown values rejected', () => {
+  assert.equal(loadStoredVoice({ getItem: () => 'clave' }), 'clave');
+  assert.equal(loadStoredVoice({ getItem: () => 'laser' }), null);
+  assert.equal(loadStoredVoice({ getItem: () => null }), null);
+  assert.equal(
+    loadStoredVoice({
+      getItem() {
+        throw new Error('blocked');
+      },
+    }),
+    null,
+  );
+});
+
+test('the voices are balanced against each other', () => {
+  /*
+   * Every voice is synthesised from its own envelopes, so nothing structural
+   * stops one from landing far louder than another — the first pass had "tick"
+   * 15 dB under the rest. Approximate perceived loudness as peak x sqrt(decay)
+   * (a noise burst integrates lower than a tonal partial) and keep the voices
+   * inside a window, with "tick" allowed to sit lower because it is the
+   * deliberately quiet option.
+   */
+  const NOISE_WEIGHT = 0.6;
+  const QUIET_BY_DESIGN = { tick: 8 };
+
+  function loudnessDb(voice) {
+    let energy = 0;
+    if (voice.noise) {
+      energy += gainFromDb(voice.noise.level) * NOISE_WEIGHT * Math.sqrt(voice.noise.decay);
+    }
+    (voice.partials || []).forEach((partial) => {
+      energy += gainFromDb(partial.level) * Math.sqrt(partial.decay);
+    });
+    return 20 * Math.log10(energy);
+  }
+
+  const measured = CLICK_VOICES.map((voice) => ({ id: voice.id, db: loudnessDb(voice) }));
+  const loudest = Math.max(...measured.map((m) => m.db));
+
+  measured.forEach(({ id, db }) => {
+    const allowedBelow = QUIET_BY_DESIGN[id] || 6;
+    assert.ok(
+      db >= loudest - allowedBelow,
+      `${id} is ${(loudest - db).toFixed(1)} dB below the loudest voice; allowed ${allowedBelow}`,
+    );
+    assert.ok(db <= loudest + 1, `${id} is louder than the reference voice`);
+  });
+});
+
+test('no voice clips when its components overlap', () => {
+  // Partial and noise envelopes all start near 0 and are summed at the master
+  // gain, so their peaks add up. Stay under 1.0.
+  CLICK_VOICES.forEach((voice) => {
+    let peak = 0;
+    if (voice.noise) peak += gainFromDb(voice.noise.level);
+    (voice.partials || []).forEach((partial) => { peak += gainFromDb(partial.level); });
+    assert.ok(peak < 1, `${voice.id} peaks at ${peak.toFixed(2)} and would clip`);
+  });
 });

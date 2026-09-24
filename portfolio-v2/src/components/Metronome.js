@@ -5,8 +5,10 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import OutOfWorkTabs from '@/components/OutOfWorkTabs';
 import {
+  CLICK_VOICES,
   DEFAULT_BEATS,
   DEFAULT_BPM,
+  DEFAULT_VOICE,
   LOOKAHEAD_S,
   MAX_BPM,
   METERS,
@@ -14,14 +16,19 @@ import {
   PRESETS,
   STORE_BPM,
   STORE_SETTINGS,
+  STORE_VOICE,
   TAP_MAX_SAMPLES,
   TAP_TIMEOUT_MS,
   TIMER_MS,
   bpmFromTaps,
   clampBpm,
+  gainFromDb,
+  isVoiceId,
   loadStoredBeats,
   loadStoredBpm,
+  loadStoredVoice,
   markingFor,
+  voiceById,
 } from '@/lib/metronome';
 import styles from './Metronome.module.css';
 
@@ -52,6 +59,7 @@ export default function Metronome() {
   // Scratch text for the number field, so typing "9" on the way to "90"
   // isn't instantly clamped back to 30.
   const [tempoText, setTempoText] = useState(null);
+  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE);
 
   const ctxRef = useRef(null);
   const masterRef = useRef(null);
@@ -63,6 +71,9 @@ export default function Metronome() {
   const currentBeatRef = useRef(1);
   const tapTimesRef = useRef([]);
   const tapResetRef = useRef(null);
+  // The scheduler runs outside React, so it reads the voice through a ref.
+  const voiceRef = useRef(DEFAULT_VOICE);
+  const noiseBufferRef = useRef(null);
 
   // ---------- latest values for the audio clock callbacks ----------
   // Refs are never written during render; the effect below keeps them current
@@ -97,8 +108,10 @@ export default function Metronome() {
     const restore = () => {
       const savedBpm = clampBpm(loadStoredBpm());
       const savedBeats = loadStoredBeats();
+      const savedVoice = loadStoredVoice();
       if (savedBpm !== null) setBpmState(savedBpm);
       if (savedBeats !== null) setBeatsState(savedBeats);
+      if (savedVoice !== null) setVoiceId(savedVoice);
     };
 
     if (typeof window.requestIdleCallback === 'function') {
@@ -110,6 +123,16 @@ export default function Metronome() {
     const handle = window.setTimeout(() => { if (!cancelled) restore(); }, 0);
     return () => { cancelled = true; window.clearTimeout(handle); };
   }, []);
+
+  // Keep the scheduler's view of the voice current, and remember the choice.
+  useEffect(() => {
+    voiceRef.current = voiceId;
+    try {
+      localStorage.setItem(STORE_VOICE, voiceId);
+    } catch (e) {
+      /* private mode */
+    }
+  }, [voiceId]);
 
   useEffect(() => {
     try {
@@ -131,31 +154,65 @@ export default function Metronome() {
     master.connect(ctx.destination);
     ctxRef.current = ctx;
     masterRef.current = master;
+
+    // One second of white noise, built once and replayed for the percussive
+    // voices (creating a buffer per click would be wasteful and jittery).
+    const frames = Math.floor(ctx.sampleRate);
+    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < frames; i += 1) data[i] = Math.random() * 2 - 1;
+    noiseBufferRef.current = buffer;
+
     return true;
   }, []);
 
   /*
-   * A short FM-blip: a sine with an exponential pitch drop and a fast decay
-   * envelope. Downbeats land a fifth higher than the other beats so you can
-   * hear where the bar restarts.
+   * One click, synthesised on the spot and queued at an exact audio-clock time.
+   *
+   * A percussion hit is not a tone that bends — it is a body ringing (inharmonic
+   * sine partials) plus a surface being struck (a filtered noise burst). Either
+   * part can be absent, which is what makes the voices sound like different
+   * objects rather than one beep at different pitches.
    */
   const click = useCallback((time, accent) => {
     const ctx = ctxRef.current;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const master = masterRef.current;
+    const voice = voiceById(voiceRef.current) || voiceById(DEFAULT_VOICE);
+    if (!ctx || !master || !voice) return;
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(accent ? 1760 : 1175, time);
-    osc.frequency.exponentialRampToValueAtTime(accent ? 660 : 440, time + 0.05);
+    if (voice.noise) {
+      const { level, attack, decay, filter } = voice.noise;
+      const source = ctx.createBufferSource();
+      source.buffer = noiseBufferRef.current;
+      const shape = ctx.createBiquadFilter();
+      shape.type = filter.type;
+      shape.frequency.value = filter.frequency;
+      shape.Q.value = filter.q;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, time);
+      env.gain.exponentialRampToValueAtTime(gainFromDb(level), time + attack);
+      env.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+      source.connect(shape);
+      shape.connect(env);
+      env.connect(master);
+      source.start(time);
+      source.stop(time + decay + 0.02);
+    }
 
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(accent ? 0.9 : 0.6, time + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + (accent ? 0.13 : 0.09));
-
-    osc.connect(gain);
-    gain.connect(masterRef.current);
-    osc.start(time);
-    osc.stop(time + 0.25);
+    (voice.partials || []).forEach((partial) => {
+      const frequency = accent ? partial.frequency * partial.ratio : partial.frequency;
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(frequency, time);
+      env.gain.setValueAtTime(0.0001, time);
+      env.gain.exponentialRampToValueAtTime(gainFromDb(partial.level), time + partial.attack);
+      env.gain.exponentialRampToValueAtTime(0.0001, time + partial.decay);
+      osc.connect(env);
+      env.connect(master);
+      osc.start(time);
+      osc.stop(time + partial.decay + 0.02);
+    });
   }, []);
 
   const scheduler = useCallback(() => {
@@ -250,6 +307,23 @@ export default function Metronome() {
     setBeatsState(value);
     if (currentBeatRef.current > value) currentBeatRef.current = 1;
   }, []);
+
+  /*
+   * Picking a voice previews it immediately — choosing a sound you cannot hear
+   * is guesswork. The preview is the downbeat, so it is also obvious which beat
+   * carries the accent. This runs inside the click handler, which is what lets
+   * a suspended AudioContext resume.
+   */
+  const changeVoice = useCallback((next) => {
+    if (!isVoiceId(next)) return;
+    setVoiceId(next);
+    voiceRef.current = next;
+
+    if (!ensureAudio()) return;
+    const ctx = ctxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    click(ctx.currentTime + 0.03, true);
+  }, [click, ensureAudio]);
 
   const tapTempo = useCallback(() => {
     const now = window.performance && performance.now ? performance.now() : Date.now();
@@ -456,6 +530,25 @@ export default function Metronome() {
             </div>
 
             <hr className={`section-rule ${styles.controlsRule}`} />
+
+            <span className={styles.controlLabel} id="voice-label">Click sound</span>
+            <div className={styles.voices} role="radiogroup" aria-labelledby="voice-label">
+              {CLICK_VOICES.map((voice) => (
+                <button
+                  key={voice.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={voiceId === voice.id}
+                  className={`${styles.voiceOption} ${voiceId === voice.id ? styles.voiceOptionActive : ''}`}
+                  onClick={() => changeVoice(voice.id)}
+                >
+                  {voice.label}
+                </button>
+              ))}
+            </div>
+            <p className={styles.fieldHint}>
+              {voiceById(voiceId)?.description || ''} — tapping a name plays it.
+            </p>
           </div>
 
           <div className={`${styles.controls} ${styles.controlsMeter}`}>
