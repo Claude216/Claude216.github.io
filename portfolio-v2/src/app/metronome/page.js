@@ -6,5 +6,11 @@ export const metadata = {
 };
 
 export default function MetronomePage() {
-  return <Metronome />;
+  // A flex column so the metronome's own palette can fill the height above the
+  // footer instead of leaving a band of the site's background.
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Metronome />
+    </div>
+  );
 }

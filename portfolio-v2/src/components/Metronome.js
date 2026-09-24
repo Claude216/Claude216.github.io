@@ -140,6 +140,12 @@ export default function Metronome() {
   // Beat dots are owned by the animation frame, so React never fights it there.
   // The render callback only records the DOM nodes; the effect lights one up.
   const dotRefs = useRef([]);
+  // Handles the beat animations reach for, plus the beat that is currently lit.
+  const activeBeatRef = useRef(1);
+  const tempoValueRef = useRef(null);
+  // A wrapper around the tempo card that gets the bar kick, so the card itself is
+  // free to keep its tilt without the two transforms fighting.
+  const cardWrapRef = useRef(null);
   const setDotRef = useCallback((index) => (el) => { dotRefs.current[index] = el; }, []);
   const activeClassName = styles.active;
 
@@ -318,10 +324,42 @@ export default function Metronome() {
     }
   }, [click]);
 
+  /*
+   * Fire the beat's animation. Restarting a CSS animation needs the class taken
+   * off and the element reflowed, otherwise setting it again is a no-op.
+   */
+  const fireBeatHit = useCallback((beat, downbeat) => {
+    activeBeatRef.current = beat;
+    const dot = dotRefs.current[beat - 1];
+    if (dot) {
+      dot.classList.remove(styles.hit, styles.downbeatHit);
+      void dot.offsetWidth;
+      dot.classList.add(downbeat ? styles.downbeatHit : styles.hit);
+    }
+
+    const value = tempoValueRef.current;
+    if (value) {
+      value.classList.remove(styles.valueHit);
+      void value.offsetWidth;
+      value.classList.add(styles.valueHit);
+    }
+    if (downbeat) {
+      const wrap = cardWrapRef.current;
+      if (wrap) {
+        wrap.classList.remove(styles.barHit);
+        void wrap.offsetWidth;
+        wrap.classList.add(styles.barHit);
+      }
+    }
+  }, []);
+
   // Visuals ride the same audio clock the clicks do, so the flash and the
   // sound stay locked together instead of drifting with the frame rate.
   // Held in a ref so the loop can re-schedule itself without a TDZ reference.
   const syncVisualsRef = useRef(() => {});
+  // The beat that last triggered a hit, so the punch is fired once per beat
+  // rather than on every animation frame.
+  const lastHitBeatRef = useRef(null);
   useEffect(() => {
     syncVisualsRef.current = () => {
       const ctx = ctxRef.current;
@@ -330,10 +368,18 @@ export default function Metronome() {
       // Each click stays lit until the clock reaches the one after it, so the
       // flash flips exactly when the next click sounds — whatever the tempo or
       // meter did in between.
-      setActiveBeat(beatAtListedTime(beatScheduleRef.current, ctx.currentTime));
+      const beat = beatAtListedTime(beatScheduleRef.current, ctx.currentTime);
+      setActiveBeat(beat);
+
+      if (beat !== null && beat !== lastHitBeatRef.current) {
+        lastHitBeatRef.current = beat;
+        // Punching on the audio clock keeps the bounce on the click.
+        fireBeatHit(beat, beat === 1);
+      }
+
       animationIdRef.current = requestAnimationFrame(syncVisualsRef.current);
     };
-  }, []);
+  }, [fireBeatHit]);
 
   /*
    * Point the click stream at a fresh spot in the audio clock: restarting
@@ -395,14 +441,22 @@ export default function Metronome() {
   }, [start, stop]);
 
   // ---------- tempo + meter ----------
-  const changeBpm = useCallback((value) => {
+  const popButton = useCallback((button) => {
+    if (!button) return;
+    button.classList.remove(styles.hit);
+    void button.offsetWidth; // reflow so the animation can restart
+    button.classList.add(styles.hit);
+  }, []);
+
+  const changeBpm = useCallback((value, button) => {
     const next = clampBpm(value);
     if (next === null) return;
+    popButton(button);
     setBpmState(next);
     // Programmatic changes (presets, tap tempo, arrows, slider) also refresh
     // the number field; the only path that leaves stale text behind is blur.
     setTempoText(String(next));
-  }, []);
+  }, [popButton]);
 
   const changeMeter = useCallback((next) => {
     const value = Number(next);
@@ -419,10 +473,18 @@ export default function Metronome() {
    * carries the accent. This runs inside the click handler, which is what lets
    * a suspended AudioContext resume.
    */
-  const changeVoice = useCallback((next) => {
+  const changeVoice = useCallback((event, next) => {
     if (!isVoiceId(next)) return;
     setVoiceId(next);
     voiceRef.current = next;
+
+    // Squash the button so choosing a sound feels like pressing a pad.
+    const button = event && event.currentTarget;
+    if (button) {
+      button.classList.remove(styles.hit);
+      void button.offsetWidth; // reflow so the animation can restart
+      button.classList.add(styles.hit);
+    }
 
     if (!ensureAudio()) return;
     const ctx = ctxRef.current;
@@ -543,10 +605,11 @@ export default function Metronome() {
           <p>My practice click for guitar — set the tempo, choose the feel, and go.</p>
         </header>
 
+        <div ref={cardWrapRef} className={styles.cardWrap}>
         <div className={styles.tempoCard}>
           <span className={styles.tempoLabel}>Tempo</span>
           <div className={styles.tempoRow}>
-            <span className={styles.tempoValue}>{bpm}</span>
+            <span ref={tempoValueRef} className={styles.tempoValue}>{bpm}</span>
             <span className={styles.tempoUnit}>BPM</span>
           </div>
           <p className={styles.tempoSub}>
@@ -569,6 +632,7 @@ export default function Metronome() {
               </span>
             ))}
           </div>
+        </div>
         </div>
 
         {/*
@@ -620,7 +684,7 @@ export default function Metronome() {
                 <button
                   key={preset}
                   type="button"
-                  onClick={() => changeBpm(preset)}
+                  onClick={(event) => changeBpm(preset, event.currentTarget)}
                   aria-pressed={bpm === preset}
                 >
                   {preset}
@@ -645,7 +709,7 @@ export default function Metronome() {
                   role="radio"
                   aria-checked={voiceId === voice.id}
                   className={`${styles.voiceOption} ${voiceId === voice.id ? styles.voiceOptionActive : ''}`}
-                  onClick={() => changeVoice(voice.id)}
+                  onClick={(event) => changeVoice(event, voice.id)}
                 >
                   {voice.label}
                 </button>
