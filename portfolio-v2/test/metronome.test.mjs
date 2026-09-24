@@ -14,6 +14,7 @@ import {
   CLICK_VOICES,
   DEFAULT_BEATS,
   DEFAULT_VOICE,
+  DEFAULT_VOLUME,
   DEFAULT_BPM,
   MARKINGS,
   MAX_BPM,
@@ -21,12 +22,17 @@ import {
   MIN_BPM,
   beatAtElapsed,
   beatDuration,
+  INITIAL_DELAY_S,
+  LOOKAHEAD_S,
+  VOLUME_MAX,
   bpmFromTaps,
   clampBpm,
   gainFromDb,
   isVoiceId,
+  loadStoredVolume,
   loadStoredVoice,
   voiceById,
+  volumeCurve,
   loadStoredBeats,
   loadStoredBpm,
   markingFor,
@@ -309,4 +315,66 @@ test('no voice clips when its components overlap', () => {
     (voice.partials || []).forEach((partial) => { peak += gainFromDb(partial.level); });
     assert.ok(peak < 1, `${voice.id} peaks at ${peak.toFixed(2)} and would clip`);
   });
+});
+
+test('the first click is scheduled beyond the scheduler lookahead', () => {
+  /*
+   * Regression: the transport used to light the downbeat the moment Start was
+   * pressed while the first click was queued INITIAL_DELAY_S later, so the
+   * opening beat was always seen before it was heard. The lead-in must also
+   * clear the lookahead window, otherwise the first click can be scheduled
+   * before the scheduler's next wake-up and never plays at all.
+   */
+  assert.ok(
+    INITIAL_DELAY_S > LOOKAHEAD_S,
+    `lead-in ${INITIAL_DELAY_S}s must exceed the lookahead ${LOOKAHEAD_S}s`,
+  );
+  assert.ok(INITIAL_DELAY_S <= 0.25, 'but stays short enough to feel responsive');
+});
+
+test('volume maps slider position to gain on a perceptual curve', () => {
+  assert.equal(volumeCurve(0), 0, 'zero is silent');
+  assert.equal(volumeCurve(VOLUME_MAX), 1, 'full is unity gain');
+
+  // Cubed: half travel should be well below half gain.
+  assert.ok(Math.abs(volumeCurve(50) - 0.125) < 1e-12);
+  assert.ok(volumeCurve(50) < 0.5, 'a linear slider would feel dead at the low end');
+});
+
+test('volume is monotonic, clamped and safe for junk', () => {
+  let previous = -1;
+  for (let position = 0; position <= VOLUME_MAX; position += 5) {
+    const gain = volumeCurve(position);
+    assert.ok(gain >= previous, `volume must not drop at position ${position}`);
+    previous = gain;
+  }
+
+  assert.equal(volumeCurve(-20), 0, 'below the range clamps to silence');
+  assert.equal(volumeCurve(500), 1, 'above the range clamps to full');
+  assert.equal(volumeCurve('abc'), 0);
+  assert.equal(volumeCurve(null), 0);
+  assert.equal(volumeCurve(undefined), 0);
+});
+
+test('the default volume is audible but not full blast', () => {
+  assert.ok(DEFAULT_VOLUME > 0 && DEFAULT_VOLUME <= VOLUME_MAX);
+  const gain = volumeCurve(DEFAULT_VOLUME);
+  assert.ok(gain > 0.2 && gain < 0.9, `default gain ${gain} should leave headroom both ways`);
+});
+
+test('stored volume is read back, clamped and validated', () => {
+  assert.equal(loadStoredVolume({ getItem: () => '40' }), 40);
+  assert.equal(loadStoredVolume({ getItem: () => '0' }), 0, 'zero is a real setting, not "missing"');
+  assert.equal(loadStoredVolume({ getItem: () => '900' }), VOLUME_MAX);
+  assert.equal(loadStoredVolume({ getItem: () => '-10' }), 0);
+  assert.equal(loadStoredVolume({ getItem: () => 'loud' }), null);
+  assert.equal(loadStoredVolume({ getItem: () => null }), null);
+  assert.equal(
+    loadStoredVolume({
+      getItem() {
+        throw new Error('blocked');
+      },
+    }),
+    null,
+  );
 });

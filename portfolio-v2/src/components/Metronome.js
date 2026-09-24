@@ -9,6 +9,9 @@ import {
   DEFAULT_BEATS,
   DEFAULT_BPM,
   DEFAULT_VOICE,
+  DEFAULT_VOLUME,
+  GAIN_RAMP_S,
+  INITIAL_DELAY_S,
   LOOKAHEAD_S,
   MAX_BPM,
   METERS,
@@ -17,18 +20,22 @@ import {
   STORE_BPM,
   STORE_SETTINGS,
   STORE_VOICE,
+  STORE_VOLUME,
   TAP_MAX_SAMPLES,
   TAP_TIMEOUT_MS,
   TIMER_MS,
   bpmFromTaps,
   clampBpm,
+  VOLUME_MAX,
   gainFromDb,
   isVoiceId,
   loadStoredBeats,
   loadStoredBpm,
   loadStoredVoice,
+  loadStoredVolume,
   markingFor,
   voiceById,
+  volumeCurve,
 } from '@/lib/metronome';
 import styles from './Metronome.module.css';
 
@@ -53,6 +60,7 @@ export default function Metronome() {
   const [bpm, setBpmState] = useState(DEFAULT_BPM);
   const [beats, setBeatsState] = useState(DEFAULT_BEATS);
   const [running, setRunning] = useState(false);
+  // null means "no beat lit yet" — used during the lead-in before the first click.
   const [activeBeat, setActiveBeat] = useState(1);
   const [tapFeedback, setTapFeedback] = useState(false);
   const [audioError, setAudioError] = useState('');
@@ -60,6 +68,7 @@ export default function Metronome() {
   // isn't instantly clamped back to 30.
   const [tempoText, setTempoText] = useState(null);
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE);
+  const [volume, setVolume] = useState(DEFAULT_VOLUME);
 
   const ctxRef = useRef(null);
   const masterRef = useRef(null);
@@ -74,6 +83,26 @@ export default function Metronome() {
   // The scheduler runs outside React, so it reads the voice through a ref.
   const voiceRef = useRef(DEFAULT_VOICE);
   const noiseBufferRef = useRef(null);
+  // Mirrors the master gain so a volume change can ramp from where it is.
+  const volumeRef = useRef(volumeCurve(DEFAULT_VOLUME));
+
+  /*
+   * Volume changes ramp over a few milliseconds instead of jumping. A hard jump
+   * on a gain node clicks audibly, which is exactly the artefact a metronome
+   * must not have.
+   */
+  const rampVolume = useCallback((target) => {
+    const ctx = ctxRef.current;
+    const master = masterRef.current;
+    if (!ctx || !master) return;
+    const now = ctx.currentTime;
+    const from = Math.max(volumeRef.current, 0.0001);
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(from, now);
+    master.gain.exponentialRampToValueAtTime(Math.max(target, 0.0001), now + GAIN_RAMP_S);
+    volumeRef.current = target;
+  }, []);
+
 
   // ---------- latest values for the audio clock callbacks ----------
   // Refs are never written during render; the effect below keeps them current
@@ -94,7 +123,9 @@ export default function Metronome() {
 
   useEffect(() => {
     dotRefs.current.length = beats;
-    const lit = (running ? activeBeat : 1) - 1;
+    // Idle shows the downbeat; while running the audio clock decides, and null
+    // lights nothing (the first click has not sounded yet).
+    const lit = running ? (activeBeat === null ? -1 : activeBeat - 1) : 0;
     dotRefs.current.forEach((dot, index) => {
       if (dot) dot.classList.toggle(activeClassName, index === lit);
     });
@@ -109,9 +140,11 @@ export default function Metronome() {
       const savedBpm = clampBpm(loadStoredBpm());
       const savedBeats = loadStoredBeats();
       const savedVoice = loadStoredVoice();
+      const savedVolume = loadStoredVolume();
       if (savedBpm !== null) setBpmState(savedBpm);
       if (savedBeats !== null) setBeatsState(savedBeats);
       if (savedVoice !== null) setVoiceId(savedVoice);
+      if (savedVolume !== null) setVolume(savedVolume);
     };
 
     if (typeof window.requestIdleCallback === 'function') {
@@ -134,6 +167,17 @@ export default function Metronome() {
     }
   }, [voiceId]);
 
+  // Apply and remember the volume. Runs on mount too, but the context does not
+  // exist yet then — ensureAudio() seeds the master gain instead.
+  useEffect(() => {
+    rampVolume(volumeCurve(volume));
+    try {
+      localStorage.setItem(STORE_VOLUME, String(volume));
+    } catch (e) {
+      /* private mode */
+    }
+  }, [volume, rampVolume]);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORE_BPM, String(bpm));
@@ -150,7 +194,7 @@ export default function Metronome() {
     if (!Ctor) return false;
     const ctx = new Ctor();
     const master = ctx.createGain();
-    master.gain.value = 1;
+    master.gain.value = volumeRef.current; // honour the saved volume from the start
     master.connect(ctx.destination);
     ctxRef.current = ctx;
     masterRef.current = master;
@@ -239,7 +283,8 @@ export default function Metronome() {
       if (!ctx || !runningRef.current) return;
       const duration = 60 / bpmRef.current;
       const elapsed = ctx.currentTime - startedAtRef.current;
-      const beat = elapsed < 0 ? 1 : (Math.floor(elapsed / duration) % beatsRef.current) + 1;
+      // Before the first click, elapsed is negative — nothing to light yet.
+      const beat = elapsed < 0 ? null : (Math.floor(elapsed / duration) % beatsRef.current) + 1;
       setActiveBeat(beat);
       animationIdRef.current = requestAnimationFrame(syncVisualsRef.current);
     };
@@ -249,10 +294,15 @@ export default function Metronome() {
   const anchorSchedule = useCallback(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
-    nextBeatTimeRef.current = ctx.currentTime + 0.09;
+    // The lead-in keeps the first click from being scheduled in the past once
+    // the context actually resumes (resume() is asynchronous, so 90 ms was
+    // occasionally swallowed on slower devices).
+    nextBeatTimeRef.current = ctx.currentTime + INITIAL_DELAY_S;
     startedAtRef.current = nextBeatTimeRef.current;
     currentBeatRef.current = 1;
-    setActiveBeat(1);
+    // No beat is lit yet: the first click has not sounded. syncVisuals() lights
+    // it from the audio clock, the same clock the clicks are queued against.
+    setActiveBeat(null);
   }, []);
 
   const stop = useCallback(() => {
@@ -264,7 +314,7 @@ export default function Metronome() {
     window.cancelAnimationFrame(animationIdRef.current);
     animationIdRef.current = null;
     currentBeatRef.current = 1;
-    setActiveBeat(1);
+    setActiveBeat(1); // back to the idle downbeat
   }, []);
 
   const start = useCallback(() => {
@@ -569,6 +619,32 @@ export default function Metronome() {
             </div>
             <p className={styles.fieldHint}>
               The first beat of every bar is accented — that is your downbeat. 6/8 counts six eighth notes.
+            </p>
+          </div>
+
+          <div className={styles.volume}>
+            <label className={styles.controlLabel} htmlFor="volume-slider">
+              <svg className={styles.volumeIcon} viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 10v4h4l5 4V6L7 10H3zm13.5 2c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4zM14 3.2v2.1c2.9.9 5 3.6 5 6.7s-2.1 5.8-5 6.7v2.1c4-1 7-4.6 7-8.8s-3-7.8-7-8.8z" />
+              </svg>
+              Volume
+            </label>
+            <div className={styles.sliderRow}>
+              <input
+                id="volume-slider"
+                type="range"
+                min="0"
+                max={VOLUME_MAX}
+                step="1"
+                value={volume}
+                onChange={(event) => setVolume(Number(event.target.value))}
+                aria-label="Output volume"
+                aria-valuetext={`${volume}%`}
+              />
+              <span className={styles.volumeValue}>{volume}%</span>
+            </div>
+            <p className={styles.fieldHint}>
+              Clicks only — your guitar is not affected.
             </p>
           </div>
 

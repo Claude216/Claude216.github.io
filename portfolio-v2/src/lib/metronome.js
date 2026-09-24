@@ -12,8 +12,10 @@ export const DEFAULT_BPM = 60;
 export const DEFAULT_BEATS = 4;
 
 /* Scheduler tuning (Web Audio lookahead pattern). */
-export const LOOKAHEAD_S = 0.12; // how far ahead of the audio clock clicks are queued
-export const TIMER_MS = 25;      // how often the scheduler wakes up
+export const LOOKAHEAD_S = 0.12;   // how far ahead of the audio clock clicks are queued
+export const TIMER_MS = 25;        // how often the scheduler wakes up
+export const INITIAL_DELAY_S = 0.15; // lead-in before the first click, so it is never cut off
+export const GAIN_RAMP_S = 0.02;   // fade applied to volume changes, to avoid zipper noise
 
 export const METERS = [2, 3, 4, 6];
 export const PRESETS = [60, 80, 100, 120, 140];
@@ -22,11 +24,16 @@ export const PRESETS = [60, 80, 100, 120, 140];
 export const TAP_TIMEOUT_MS = 2200;
 export const TAP_MAX_SAMPLES = 6;
 
+/* Output volume, as a 0-100 position on the slider. */
+export const DEFAULT_VOLUME = 80;
+export const VOLUME_MAX = 100;
+
 /* localStorage keys — shared with the previous static build so a visitor's
  * saved tempo carries over. */
 export const STORE_BPM = 'lowork.bpm';
 export const STORE_SETTINGS = 'lowork.settings';
 export const STORE_VOICE = 'lowork.voice';
+export const STORE_VOLUME = 'lowork.volume';
 
 /*
  * Click voices.
@@ -98,6 +105,31 @@ export function voiceById(value) {
 /** Decibels to a linear gain multiplier, relative to 1. */
 export function gainFromDb(db) {
   return 10 ** (Number(db) / 20);
+}
+
+/**
+ * Slider position (0-100) to a linear gain.
+ *
+ * Cubed rather than linear: perceived loudness roughly follows a power law, so
+ * a linear slider would feel like it did nothing until the last few percent.
+ */
+export function volumeCurve(position) {
+  const clamped = Math.max(0, Math.min(VOLUME_MAX, Number(position)));
+  if (!Number.isFinite(clamped)) return 0;
+  return (clamped / VOLUME_MAX) ** 3;
+}
+
+/** Read a stored volume; null when nothing usable is stored. */
+export function loadStoredVolume(storage = globalThis.localStorage) {
+  try {
+    const raw = storage.getItem(STORE_VOLUME);
+    if (raw === null) return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    return Math.max(0, Math.min(VOLUME_MAX, Math.round(value)));
+  } catch (e) {
+    return null;
+  }
 }
 
 /** Read a stored click voice; null when nothing usable is stored. */
