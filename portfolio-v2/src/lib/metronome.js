@@ -107,6 +107,64 @@ export function gainFromDb(db) {
   return 10 ** (Number(db) / 20);
 }
 
+/*
+ * Beat scheduling.
+ *
+ * The transport keeps one piece of state — when the last click was queued, and
+ * which beat of the bar it was — and advances it one beat at a time. Nothing
+ * derives a beat from elapsed time, because that silently assumes a constant
+ * tempo and an unchanging meter; the metronome allows both to change while it
+ * is running.
+ */
+
+/** Seconds between clicks at a given tempo. */
+export function beatInterval(bpm) {
+  return 60 / Number(bpm);
+}
+
+/**
+ * Advance the transport by one beat.
+ *
+ * A bar is counted in beats, so a meter change can only take effect at a bar
+ * line: if the counter has run past the new meter, this beat starts the new bar
+ * as beat 1. That is what makes switching time signature mid-playback land the
+ * downbeat where it should.
+ */
+export function nextBeatState(lastBeatAt, currentBeat, bpm, beatsPerBar) {
+  let beat = Math.round(currentBeat);
+  if (beat < 1 || beat > beatsPerBar) beat = 1;
+  const duration = beatInterval(bpm);
+  return {
+    at: lastBeatAt + duration,
+    beat,
+    duration,
+    // The meter this beat belongs to. A queued beat keeps it, because a meter
+    // change only takes effect at the next bar line — resolving a beat against
+    // the newly chosen meter would mislabel every beat still in flight.
+    beatsPerBar,
+    nextBeat: beat >= beatsPerBar ? 1 : beat + 1,
+  };
+}
+
+/**
+ * Which beat of the bar is sounding — or should be lit — at a moment in time.
+ *
+ * Returns null before the first click. While the transport is running only one
+ * beat is ever queued ahead, so `ticks` is 0 for the live beat and 1 for the one
+ * already queued; both are resolved exactly, which is why the flash flips on the
+ * click rather than near it.
+ */
+export function beatAtListedTime(schedule, when) {
+  if (!schedule || !(schedule.at >= 0)) return null;
+  if (!(when >= schedule.at)) return null;
+  const duration = schedule.duration;
+  const beatsPerBar = schedule.beatsPerBar;
+  if (!(duration > 0) || !(beatsPerBar > 0)) return schedule.beat;
+  const ticks = Math.floor((when - schedule.at) / duration);
+  if (ticks <= 0) return schedule.beat;
+  return ((schedule.beat - 1 + ticks) % beatsPerBar) + 1;
+}
+
 /**
  * Slider position (0-100) to a linear gain.
  *

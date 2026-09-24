@@ -25,12 +25,15 @@ import {
   INITIAL_DELAY_S,
   LOOKAHEAD_S,
   VOLUME_MAX,
+  beatAtListedTime,
+  beatInterval,
   bpmFromTaps,
   clampBpm,
   gainFromDb,
   isVoiceId,
   loadStoredVolume,
   loadStoredVoice,
+  nextBeatState,
   voiceById,
   volumeCurve,
   loadStoredBeats,
@@ -377,4 +380,212 @@ test('stored volume is read back, clamped and validated', () => {
     }),
     null,
   );
+});
+
+/* ------------------------------------------------------------------ *
+ * Beat scheduling: the transport advances one beat at a time, and the
+ * visual reads back what it queued. These cover the settings changes a
+ * player makes mid-practice.
+ * ------------------------------------------------------------------ */
+
+/*
+ * Mirror of the component's scheduling loop: a bar in progress keeps the meter
+ * it began under, and a fresh bar adopts whatever is selected when it starts.
+ * `select(i)` is called before click i, standing in for the player changing the
+ * picker mid-playback.
+ */
+function runClicks({ bpm, meter = 4, select, startAt = 0, clicks = 12 }) {
+  const out = [];
+  let lastAt = startAt;
+  let beat = 1;
+  let barMeter = null;
+  let barStart = true;
+  let selected = meter;
+
+  for (let i = 0; i < clicks; i += 1) {
+    if (select) selected = select(i, selected);
+    if (barStart) barMeter = selected;
+
+    const state = nextBeatState(lastAt, beat, bpm, barMeter);
+    barStart = state.beat >= state.beatsPerBar;
+    lastAt = state.at;
+    beat = state.nextBeat;
+    out.push(state);
+  }
+  return out;
+}
+
+test('the transport accents the first beat of every bar', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4 });
+  assert.deepEqual(clicks.map((c) => c.beat), [1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4]);
+  assert.deepEqual(
+    clicks.map((c) => c.at),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  );
+});
+
+test('click spacing follows the tempo, and changes take effect on the next beat', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, clicks: 4 });
+  assert.equal(clicks[1].at - clicks[0].at, 1);
+
+  // Now at 120 BPM: 0.5 s per beat from the next click onward.
+  let lastAt = clicks[3].at;
+  let beat = clicks[3].nextBeat;
+  const fast = [];
+  for (let i = 0; i < 3; i += 1) {
+    const state = nextBeatState(lastAt, beat, 120, 4);
+    fast.push(state);
+    lastAt = state.at;
+    beat = state.nextBeat;
+  }
+  fast.forEach((state) => assert.ok(Math.abs(state.duration - 0.5) < 1e-12));
+  assert.ok(Math.abs(fast[0].at - (clicks[3].at + 0.5)) < 1e-12);
+});
+
+test('the bar in progress finishes under the meter it began with', () => {
+  // 4/4 for two beats, then the player picks 3/4: the 4/4 bar still gets its
+  // beats 3 and 4, and 3/4 begins on the next bar line, accented.
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 2 ? 4 : 3), clicks: 10 });
+  assert.deepEqual(clicks.map((c) => c.beat).slice(0, 8), [1, 2, 3, 4, 1, 2, 3, 1]);
+  assert.deepEqual(clicks.map((c) => c.beatsPerBar).slice(0, 8), [4, 4, 4, 4, 3, 3, 3, 3]);
+});
+
+test('widening the meter takes effect at the next bar line, not mid-bar', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 2 ? 4 : 6), clicks: 12 });
+  assert.deepEqual(
+    clicks.map((c) => c.beat).slice(0, 11),
+    [1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 1],
+    'the 4/4 bar completes, then the 6/4 bar runs its full length',
+  );
+});
+
+test('a slower meter change is applied without dropping or doubling a beat', () => {
+  const clicks = runClicks({ bpm: 120, meter: 6, select: (i) => (i < 4 ? 6 : 2) });
+  clicks.forEach((state, index) => {
+    if (index > 0) {
+      assert.ok(
+        Math.abs(state.at - clicks[index - 1].at - beatInterval(120)) < 1e-12,
+        'beats must stay evenly spaced across a meter change',
+      );
+    }
+  });
+  // The 6/4 bar runs its full six beats, so the 2/4 downbeat is the seventh click.
+  assert.equal(clicks[6].beat, 1, '2/4 begins on a downbeat');
+  assert.equal(clicks[6].beatsPerBar, 2);
+});
+
+test('the flashed beat matches what was queued, per click', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 3 ? 4 : 3) });
+  clicks.forEach((state) => {
+    const schedule = state;
+    // The instant the click sounds, and just before the next one:
+    assert.equal(beatAtListedTime(schedule, state.at), state.beat);
+    assert.equal(
+      beatAtListedTime(schedule, state.at + state.duration * 0.99),
+      state.beat,
+      'the lit beat must hold until the next click',
+    );
+  });
+});
+
+test('the flashed beat flips onto the next click, not near it', () => {
+  const schedule = { at: 2, beat: 2, duration: 0.5, beatsPerBar: 4 };
+  assert.equal(beatAtListedTime(schedule, 2), 2);
+  assert.equal(beatAtListedTime(schedule, 2.499), 2);
+  assert.equal(beatAtListedTime(schedule, 2.5), 3, 'flips exactly on the click');
+});
+
+test('the flashed beat wraps within the current meter', () => {
+  const schedule = { at: 0, beat: 3, duration: 1, beatsPerBar: 4 };
+  assert.equal(beatAtListedTime(schedule, 0), 3);
+  assert.equal(beatAtListedTime(schedule, 1), 4);
+  assert.equal(beatAtListedTime(schedule, 2), 1);
+
+  // A beat queued under 3/4 wraps after beat 3, and a beat still in flight when
+  // the player switches keeps counting in the meter it was queued under.
+  const threeFour = { at: 0, beat: 3, duration: 1, beatsPerBar: 3 };
+  assert.equal(beatAtListedTime(threeFour, 1), 1, 'wraps after beat 3 in 3/4');
+});
+
+test('nothing is lit before the first click', () => {
+  // The transport reports beat 0 until a click has been queued.
+  assert.equal(beatAtListedTime({ at: -1, beat: 0, duration: 1, beatsPerBar: 4 }, 5), null);
+  // And a click queued in the future is not lit yet.
+  const schedule = { at: 10, beat: 1, duration: 1, beatsPerBar: 4 };
+  assert.equal(beatAtListedTime(schedule, 9.99), null);
+  assert.equal(beatAtListedTime(schedule, 10), 1);
+});
+
+test('beatAtListedTime tolerates a missing or degenerate schedule', () => {
+  assert.equal(beatAtListedTime(null, 1), null);
+  assert.equal(beatAtListedTime(undefined, 1), null);
+  assert.equal(beatAtListedTime({ at: 0, beat: 2, duration: 0, beatsPerBar: 4 }, 5), 2);
+});
+
+test('a nonsensical stored beat counter is recovered rather than mis-accented', () => {
+  // Guards against a stale counter surviving a meter change.
+  assert.equal(nextBeatState(0, 9, 60, 4).beat, 1);
+  assert.equal(nextBeatState(0, 0, 60, 4).beat, 1);
+  assert.equal(nextBeatState(0, -3, 60, 4).beat, 1);
+});
+
+test('a mid-bar meter change does not cut the running bar short', () => {
+  /*
+   * Regression: the transport holds the *next* beat in its counter, so the
+   * obvious "if the counter exceeds the new meter, restart the bar" rule fired
+   * one beat early and truncated a bar that had already begun. Switching from
+   * 4/4 to 2/4 after beat 2 must still play beats 3 and 4.
+   */
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 2 ? 4 : 2), clicks: 9 });
+
+  assert.deepEqual(
+    clicks.map((c) => c.beat).slice(0, 6),
+    [1, 2, 3, 4, 1, 2],
+    'the running 4/4 bar must finish before 2/4 begins',
+  );
+  assert.deepEqual(
+    clicks.map((c) => c.beatsPerBar).slice(0, 6),
+    [4, 4, 4, 4, 2, 2],
+    'and the meter is reported per beat, so the dots can follow it',
+  );
+});
+
+test('the new meter is accented as the next bar line', () => {
+  const clicks = runClicks({ bpm: 60, meter: 4, select: (i) => (i < 2 ? 4 : 2), clicks: 8 });
+  const downbeats = clicks.filter((c) => c.beat === 1).map((c) => c.at);
+  assert.deepEqual(downbeats.slice(0, 3), [1, 5, 7], '2/4 bars are two beats long from bar 2');
+});
+
+test('every beat is flashed as the beat that sounds', () => {
+  // The whole point of the fix: across a meter change, the lit dot, the beat
+  // number and the accent all agree at the instant each click fires.
+  const clicks = runClicks({ bpm: 100, meter: 4, select: (i) => (i < 3 ? 4 : 3), clicks: 10 });
+  clicks.forEach((state, index) => {
+    assert.equal(
+      beatAtListedTime(state, state.at),
+      state.beat,
+      `click ${index + 1} flashed the wrong beat`,
+    );
+    assert.ok(state.beat >= 1 && state.beat <= state.beatsPerBar, 'beat must fit its meter');
+  });
+});
+
+test('switching meter repeatedly stays musically consistent', () => {
+  const meters = [4, 3, 6, 2];
+  const clicks = runClicks({
+    bpm: 120,
+    meter: 4,
+    select: (i) => meters[Math.floor(i / 3) % meters.length],
+    clicks: 24,
+  });
+
+  clicks.forEach((state, index) => {
+    if (index > 0) {
+      assert.ok(
+        Math.abs(state.at - clicks[index - 1].at - beatInterval(120)) < 1e-12,
+        'beats stay evenly spaced no matter how often the meter changes',
+      );
+    }
+    assert.ok(state.beat >= 1 && state.beat <= state.beatsPerBar);
+  });
 });

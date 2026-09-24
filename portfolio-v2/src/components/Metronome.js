@@ -24,6 +24,8 @@ import {
   TAP_MAX_SAMPLES,
   TAP_TIMEOUT_MS,
   TIMER_MS,
+  beatAtListedTime,
+  beatInterval,
   bpmFromTaps,
   clampBpm,
   VOLUME_MAX,
@@ -34,6 +36,7 @@ import {
   loadStoredVoice,
   loadStoredVolume,
   markingFor,
+  nextBeatState,
   voiceById,
   volumeCurve,
 } from '@/lib/metronome';
@@ -69,14 +72,31 @@ export default function Metronome() {
   const [tempoText, setTempoText] = useState(null);
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE);
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
+  // The meter the clicks are currently using. A change to the picker only takes
+  // effect at the next bar line, so the dots follow this until then.
+  const [playingBeats, setPlayingBeats] = useState(null);
 
   const ctxRef = useRef(null);
   const masterRef = useRef(null);
   const schedulerIdRef = useRef(null);
   const animationIdRef = useRef(null);
   const runningRef = useRef(false);
-  const nextBeatTimeRef = useRef(0);
-  const startedAtRef = useRef(0);
+  /*
+   * The scheduler records when it queued each click and which beat of the bar
+   * that was. The visual reads this instead of recomputing a beat from elapsed
+   * time — an elapsed-time model silently assumes a constant tempo and an
+   * unchanging meter, so changing either mid-playback used to slide the flash
+   * away from the sound.
+   */
+  const beatScheduleRef = useRef({ at: -1, beat: 0, duration: 60 / DEFAULT_BPM });
+  const playingBeatsRef = useRef(null);
+  // The meter the bar currently being played belongs to. Held for the whole bar
+  // so a mid-bar change to the picker cannot shorten a bar already running, then
+  // the next bar starts on whatever is selected at that point.
+  const barMeterRef = useRef(null);
+  // Set when the next beat emitted should open a new bar.
+  const barStartRef = useRef(true);
+  const lastScheduledAtRef = useRef(0);
   const currentBeatRef = useRef(1);
   const tapTimesRef = useRef([]);
   const tapResetRef = useRef(null);
@@ -122,14 +142,16 @@ export default function Metronome() {
   const activeClassName = styles.active;
 
   useEffect(() => {
-    dotRefs.current.length = beats;
-    // Idle shows the downbeat; while running the audio clock decides, and null
-    // lights nothing (the first click has not sounded yet).
+    // While running, the dots match the meter the clicks are in — otherwise a
+    // meter change would shrink the row while the old bar is still sounding, and
+    // its remaining beats would light nothing.
+    const shown = running && playingBeats ? playingBeats : beats;
+    dotRefs.current.length = shown;
     const lit = running ? (activeBeat === null ? -1 : activeBeat - 1) : 0;
     dotRefs.current.forEach((dot, index) => {
       if (dot) dot.classList.toggle(activeClassName, index === lit);
     });
-  }, [running, activeBeat, beats, activeClassName]);
+  }, [running, activeBeat, beats, playingBeats, activeClassName]);
 
   // ---------- persistence ----------
   // localStorage is an external system, so it is read after mount (reading it
@@ -259,17 +281,36 @@ export default function Metronome() {
     });
   }, []);
 
+  /*
+   * Queues the next clicks. Stable across renders — the interval is created
+   * once when playback starts and would otherwise keep calling an old closure —
+   * and it reads tempo/meter from refs, so a change is picked up immediately
+   * without restarting the transport.
+   */
   const scheduler = useCallback(() => {
     const ctx = ctxRef.current;
     if (!ctx || ctx.state !== 'running') return; // clock frozen — don't queue a burst
-    while (nextBeatTimeRef.current < ctx.currentTime + LOOKAHEAD_S) {
-      // One stable callback reads tempo/meter from refs, so the running
-      // interval always sees the current settings.
-      click(nextBeatTimeRef.current, currentBeatRef.current === 1);
-      nextBeatTimeRef.current += 60 / bpmRef.current;
-      currentBeatRef.current = currentBeatRef.current >= beatsRef.current
-        ? 1
-        : currentBeatRef.current + 1;
+
+    while (lastScheduledAtRef.current + 0.001 < ctx.currentTime + LOOKAHEAD_S) {
+      // A bar in progress keeps the meter it began under; a fresh bar picks up
+      // whatever the player has selected by the time it starts.
+      if (barStartRef.current) barMeterRef.current = beatsRef.current;
+
+      const state = nextBeatState(
+        lastScheduledAtRef.current,
+        currentBeatRef.current,
+        bpmRef.current,
+        barMeterRef.current,
+      );
+      barStartRef.current = state.beat >= state.beatsPerBar;
+      click(state.at, state.beat === 1);
+      lastScheduledAtRef.current = state.at;
+      currentBeatRef.current = state.nextBeat;
+      beatScheduleRef.current = state;
+      if (state.beatsPerBar !== playingBeatsRef.current) {
+        playingBeatsRef.current = state.beatsPerBar;
+        setPlayingBeats(state.beatsPerBar);
+      }
     }
   }, [click]);
 
@@ -281,27 +322,33 @@ export default function Metronome() {
     syncVisualsRef.current = () => {
       const ctx = ctxRef.current;
       if (!ctx || !runningRef.current) return;
-      const duration = 60 / bpmRef.current;
-      const elapsed = ctx.currentTime - startedAtRef.current;
-      // Before the first click, elapsed is negative — nothing to light yet.
-      const beat = elapsed < 0 ? null : (Math.floor(elapsed / duration) % beatsRef.current) + 1;
-      setActiveBeat(beat);
+
+      // Each click stays lit until the clock reaches the one after it, so the
+      // flash flips exactly when the next click sounds — whatever the tempo or
+      // meter did in between.
+      setActiveBeat(beatAtListedTime(beatScheduleRef.current, ctx.currentTime));
       animationIdRef.current = requestAnimationFrame(syncVisualsRef.current);
     };
   }, []);
 
-  /* Restart the click stream from a known point in the audio clock. */
+  /*
+   * Point the click stream at a fresh spot in the audio clock: restarting
+   * playback, or resuming a context whose clock was frozen by the tab being
+   * hidden (otherwise every beat "missed" while suspended would be queued at
+   * once). The lead-in also keeps the first click out of the past, since
+   * resume() is asynchronous.
+   */
   const anchorSchedule = useCallback(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
-    // The lead-in keeps the first click from being scheduled in the past once
-    // the context actually resumes (resume() is asynchronous, so 90 ms was
-    // occasionally swallowed on slower devices).
-    nextBeatTimeRef.current = ctx.currentTime + INITIAL_DELAY_S;
-    startedAtRef.current = nextBeatTimeRef.current;
+    const firstBeatAt = ctx.currentTime + INITIAL_DELAY_S;
+    lastScheduledAtRef.current = firstBeatAt;
     currentBeatRef.current = 1;
-    // No beat is lit yet: the first click has not sounded. syncVisuals() lights
-    // it from the audio clock, the same clock the clicks are queued against.
+    // No beat lit yet: the first click has not sounded. syncVisuals() lights it
+    // from the audio clock, the same clock the clicks are queued against.
+    barMeterRef.current = null;
+    barStartRef.current = true;
+    beatScheduleRef.current = { at: -1, beat: 0, duration: beatInterval(bpmRef.current), beatsPerBar: beatsRef.current };
     setActiveBeat(null);
   }, []);
 
@@ -315,6 +362,8 @@ export default function Metronome() {
     animationIdRef.current = null;
     currentBeatRef.current = 1;
     setActiveBeat(1); // back to the idle downbeat
+    playingBeatsRef.current = null;
+    setPlayingBeats(null);
   }, []);
 
   const start = useCallback(() => {
@@ -354,8 +403,10 @@ export default function Metronome() {
   const changeMeter = useCallback((next) => {
     const value = Number(next);
     if (METERS.indexOf(value) === -1) return;
+    // The scheduler notices the new meter at the next bar line and begins the
+    // bar there; the running bar is left to finish, because a bar is counted in
+    // beats and cannot be cut short.
     setBeatsState(value);
-    if (currentBeatRef.current > value) currentBeatRef.current = 1;
   }, []);
 
   /*
